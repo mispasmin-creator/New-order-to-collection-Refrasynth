@@ -22,7 +22,7 @@ export default function ArrangeLogisticsPage() {
   const [error, setError]                   = useState('');
   const [successNotice, setSuccessNotice]   = useState('');
   const [searchQuery, setSearchQuery]       = useState('');
-  const [statusTab, setStatusTab]           = useState('Pending'); // 'Pending' | 'Completed' | 'All'
+  const [statusTab, setStatusTab]           = useState('Pending'); // 'Pending' | 'History'
 
   // Master Data
   const [masterData, setMasterData]         = useState({});
@@ -162,7 +162,7 @@ export default function ArrangeLogisticsPage() {
       const isArranged = Boolean(arrangedLogisticsMap[doKey] && arrangedLogisticsMap[doKey].length > 0);
 
       if (statusTab === 'Pending' && isArranged) return false;
-      if (statusTab === 'Completed' && !isArranged) return false;
+      if (statusTab === 'History' && !isArranged) return false;
 
       const q = searchQuery.toLowerCase();
       if (!q) return true;
@@ -397,29 +397,18 @@ export default function ArrangeLogisticsPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Pending Logistics ({pendingCount})
+              Pending ({pendingCount})
             </button>
             <button
               type="button"
-              onClick={() => setStatusTab('Completed')}
+              onClick={() => setStatusTab('History')}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                statusTab === 'Completed'
-                  ? 'bg-white text-emerald-600 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Completed ({completedCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusTab('All')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                statusTab === 'All'
+                statusTab === 'History'
                   ? 'bg-white text-slate-800 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              All ({eligibleOrders.length})
+              History ({completedCount})
             </button>
           </div>
         </div>

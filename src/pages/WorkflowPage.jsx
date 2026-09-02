@@ -8,7 +8,7 @@ import {
   ExternalLink,
   CheckCircle2,
   AlertCircle,
-  Calendar,
+  Eye,
 } from 'lucide-react';
 
 const palette = {
@@ -25,17 +25,10 @@ const TABLE_COLS = [
   { label: 'Timestamp',            key: 'timestamp',        mono: true,  dim: true  },
   { label: 'DO No.',               key: 'doNumber',         mono: true,  bold: true, color: 'indigo' },
   { label: 'Party PO No.',         key: 'partyPoNo',        bold: true  },
-  { label: 'Party PO Date',        key: 'partyPoDate'      },
   { label: 'Party Names',          key: 'partyNames',       bold: true  },
   { label: 'Product Name',         key: 'productName'      },
   { label: 'Quantity',             key: 'quantity',         right: true, num: true   },
-  { label: 'Rate',                 key: 'rateOfMaterial',   right: true, currency: true },
   { label: 'Total PO Value',       key: 'totalPoValue',     right: true, currency: true, bold: true },
-  { label: 'Sales Person',         key: 'salesPersonName'  },
-  { label: 'Type Of Transporting', key: 'typeOfTransporting' },
-  { label: 'Payment To Be Taken',  key: 'paymentToBeTaken' },
-  { label: 'TC Required',          key: 'tcRequired'       },
-  { label: 'Upload SO',            key: 'uploadSo',         link: true  },
 ];
 
 export default function WorkflowPage({
@@ -54,12 +47,16 @@ export default function WorkflowPage({
   const [successNotice, setSuccessNotice] = useState('');
   const [searchQuery, setSearchQuery]   = useState('');
   const [isModalOpen, setIsModalOpen]   = useState(false);
-  const [activeOrder, setActiveOrder]   = useState(null);
+  const [activeGroup, setActiveGroup]   = useState([]);
   const [modalForm, setModalForm]       = useState({});
   const [decision, setDecision]         = useState('');
   const [expectedDate, setExpectedDate] = useState('');
   const [saving, setSaving]             = useState(false);
   const [masterData, setMasterData]     = useState({});
+
+  // View Modal State
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [viewGroup, setViewGroup]             = useState([]);
 
   const clr = palette[actionColor] || palette.indigo;
 
@@ -115,14 +112,47 @@ export default function WorkflowPage({
     );
   }, [orders, searchQuery, filterPredicate]);
 
-  const handleOpenModal = (order) => {
-    setActiveOrder(order); setDecision(''); setExpectedDate('');
+  // Group multi-product submissions (same Party PO No + Date + Party Name) into a
+  // single row so one PO with several products reads — and gets actioned — as one order
+  const groupedOrders = useMemo(() => {
+    const groups = [];
+    const indexByKey = {};
+    filteredOrders.forEach((order) => {
+      const key = [
+        String(order.partyPoNo ?? '').trim().toLowerCase(),
+        String(order.partyPoDate ?? '').trim(),
+        String(order.partyNames ?? '').trim().toLowerCase(),
+      ].join('|');
+      if (!order.partyPoNo || indexByKey[key] === undefined) {
+        indexByKey[key] = groups.length;
+        groups.push({ key: `${key}-${groups.length}`, orders: [order] });
+      } else {
+        groups[indexByKey[key]].orders.push(order);
+      }
+    });
+    return groups;
+  }, [filteredOrders]);
+
+  // Open action modal — accepts a single order or a group of orders sharing one PO
+  const handleOpenModal = (orderOrGroup) => {
+    const rows = Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup];
+    setActiveGroup(rows); setDecision(''); setExpectedDate('');
     const init = {}; modalFields.forEach((f) => { init[f.key] = ''; }); setModalForm(init);
     setIsModalOpen(true);
   };
 
+  // Open View Modal — accepts a single order or a group of orders sharing one PO
+  const handleOpenView = (orderOrGroup) => {
+    setViewGroup(Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup]);
+    setIsViewModalOpen(true);
+  };
+
   const handleConfirm = async () => {
-    const parts = [`Order ${activeOrder.doNumber} - ${actionLabel}`, decision];
+    const doNumbers = activeGroup.map((o) => o.doNumber);
+    const parts = [
+      doNumbers.length > 1 ? `${doNumbers.length} orders (${doNumbers.join(', ')}) - ${actionLabel}` : `Order ${doNumbers[0]} - ${actionLabel}`,
+      decision,
+    ];
     if (expectedDate) parts.push(`Expected: ${expectedDate}`);
     modalFields.forEach((f) => { if (modalForm[f.key]) parts.push(`${f.label}: ${modalForm[f.key]}`); });
 
@@ -140,7 +170,9 @@ export default function WorkflowPage({
         if (remarkVal) {
           payload[`Remark ${stageKey}`] = remarkVal;
         }
-        await api.updateOrderFields(activeOrder.rowIndex, payload, activeOrder.doNumber);
+        await Promise.all(
+          activeGroup.map((o) => api.updateOrderFields(o.rowIndex, payload, o.doNumber))
+        );
       } catch (e) {
         console.warn('Could not update stage in sheet:', e);
       } finally {
@@ -226,51 +258,115 @@ export default function WorkflowPage({
                   <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                   <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                 </td></tr>
-              ) : filteredOrders.length === 0 ? (
+              ) : groupedOrders.length === 0 ? (
                 <tr><td colSpan={TABLE_COLS.length + 1} className="py-16 text-center text-slate-400">
                   <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <h3 className="text-sm font-semibold text-slate-700">No orders found</h3>
                   <p className="text-xs text-slate-400 mt-1">{searchQuery ? 'Try adjusting your search.' : 'Orders created in the Orders page will appear here.'}</p>
                 </td></tr>
-              ) : filteredOrders.map((order, idx) => (
-                <tr key={order.doNumber || idx} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
-                    <button type="button" onClick={() => handleOpenModal(order)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all ${clr.btn}`}>
-                      {pageIcon && React.cloneElement(pageIcon, { className: 'w-3.5 h-3.5' })}
-                      {actionLabel}
-                    </button>
-                  </td>
-                  {TABLE_COLS.map((col) => (
-                    <td key={col.key} className={cellClass(col)}>{cellValue(order, col)}</td>
-                  ))}
-                </tr>
-              ))}
+              ) : groupedOrders.map((group) => {
+                const orderRows = group.orders;
+                const order = orderRows[0];
+                const isGroup = orderRows.length > 1;
+                const doNumbers = orderRows.map((o) => o.doNumber).filter(Boolean).join(', ');
+                const productNames = orderRows.map((o) => o.productName).filter(Boolean);
+                const totalQuantity = orderRows.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
+                const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+
+                return (
+                  <tr key={group.key} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenView(orderRows)}
+                          title={isGroup ? `View all ${orderRows.length} products` : 'View Full Details'}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative"
+                        >
+                          <Eye className="w-4 h-4" />
+                          {isGroup && (
+                            <span className="absolute -top-1 -right-1 flex items-center justify-center w-3.5 h-3.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full">
+                              {orderRows.length}
+                            </span>
+                          )}
+                        </button>
+                        <button type="button" onClick={() => handleOpenModal(orderRows)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all ${clr.btn}`}>
+                          {pageIcon && React.cloneElement(pageIcon, { className: 'w-3.5 h-3.5' })}
+                          {actionLabel}
+                        </button>
+                      </div>
+                    </td>
+                    {TABLE_COLS.map((col) => {
+                      if (col.key === 'doNumber') {
+                        return (
+                          <td key={col.key} className={cellClass(col)} title={isGroup ? doNumbers : undefined}>
+                            {isGroup ? `${order.doNumber} +${orderRows.length - 1}` : (order.doNumber || '—')}
+                          </td>
+                        );
+                      }
+                      if (col.key === 'productName') {
+                        return (
+                          <td key={col.key} className={cellClass(col)} title={isGroup ? productNames.join(', ') : undefined}>
+                            {isGroup ? `${orderRows.length} products` : (order.productName || '—')}
+                          </td>
+                        );
+                      }
+                      if (col.key === 'quantity') {
+                        return (
+                          <td key={col.key} className={cellClass(col)}>
+                            {totalQuantity ? totalQuantity.toLocaleString('en-IN') : '—'}
+                          </td>
+                        );
+                      }
+                      if (col.key === 'totalPoValue') {
+                        return (
+                          <td key={col.key} className={cellClass(col)}>
+                            {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={col.key} className={cellClass(col)}>{cellValue(order, col)}</td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {isModalOpen && activeOrder && (
+      {isModalOpen && activeGroup.length > 0 && (() => {
+        const activePrimary = activeGroup[0];
+        const activeIsGroup = activeGroup.length > 1;
+        const activeTotalPoValueSum = activeGroup.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+
+        return (
         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}
-          title={`${actionLabel} - ${activeOrder.doNumber || 'Order'}`} maxWidth="max-w-2xl">
+          title={`${actionLabel} - ${activePrimary.doNumber || 'Order'}${activeIsGroup ? ` + ${activeGroup.length - 1} more` : ''}`} maxWidth="max-w-2xl">
           <div className="space-y-5">
+            {activeIsGroup && (
+              <div className={`flex items-center gap-2 px-4 py-2.5 border rounded-xl text-xs font-medium bg-indigo-50 border-indigo-200 text-indigo-700`}>
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                This decision will apply to all {activeGroup.length} products from this PO: {activeGroup.map((o) => o.doNumber).join(', ')}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs">
               {[
-                { label: 'DO Number',         value: activeOrder.doNumber,          extraCls: 'font-bold text-indigo-600 font-mono text-sm' },
-                { label: 'Party PO No.',      value: activeOrder.partyPoNo,         extraCls: 'font-semibold' },
-                { label: 'Party PO Date',     value: api.formatDate(activeOrder.partyPoDate) },
-                { label: 'Party Name',        value: activeOrder.partyNames,        extraCls: 'font-semibold' },
-                { label: 'Product Name',      value: activeOrder.productName        },
-                { label: 'Quantity',          value: activeOrder.quantity ? Number(activeOrder.quantity).toLocaleString('en-IN') : null },
-                { label: 'Rate Of Material',  value: activeOrder.rateOfMaterial ? `₹${Number(activeOrder.rateOfMaterial).toLocaleString('en-IN')}` : null },
-                { label: 'Total PO Basic',    value: activeOrder.totalPoBasicValue ? `₹${Number(activeOrder.totalPoBasicValue).toLocaleString('en-IN')}` : null },
-                { label: 'Total PO Value',    value: activeOrder.totalPoValue ? `₹${Number(activeOrder.totalPoValue).toLocaleString('en-IN')}` : null, extraCls: 'font-bold text-emerald-700' },
-                { label: 'Sales Person',      value: activeOrder.salesPersonName    },
-                { label: 'Transporting',      value: activeOrder.typeOfTransporting  },
-                { label: 'Payment To Taken',  value: activeOrder.paymentToBeTaken   },
-                { label: 'TC Required',       value: activeOrder.tcRequired         },
-                { label: 'Timestamp',         value: api.formatDate(activeOrder.timestamp), extraCls: 'font-mono text-[11px] text-slate-400' },
+                { label: activeIsGroup ? 'DO Numbers' : 'DO Number', value: activeGroup.map((o) => o.doNumber).join(', '), extraCls: 'font-bold text-indigo-600 font-mono text-sm' },
+                { label: 'Party PO No.',      value: activePrimary.partyPoNo,         extraCls: 'font-semibold' },
+                { label: 'Party PO Date',     value: api.formatDate(activePrimary.partyPoDate) },
+                { label: 'Party Name',        value: activePrimary.partyNames,        extraCls: 'font-semibold' },
+                { label: activeIsGroup ? `Products (${activeGroup.length})` : 'Product Name', value: activeIsGroup ? activeGroup.map((o) => o.productName).filter(Boolean).join(', ') : activePrimary.productName },
+                { label: 'Total PO Value' + (activeIsGroup ? ' (All Products)' : ''), value: activeTotalPoValueSum ? `₹${activeTotalPoValueSum.toLocaleString('en-IN')}` : null, extraCls: 'font-bold text-emerald-700' },
+                { label: 'Sales Person',      value: activePrimary.salesPersonName    },
+                { label: 'Transporting',      value: activePrimary.typeOfTransporting  },
+                { label: 'Payment To Taken',  value: activePrimary.paymentToBeTaken   },
+                { label: 'TC Required',       value: activePrimary.tcRequired         },
+                { label: 'Timestamp',         value: api.formatDate(activePrimary.timestamp), extraCls: 'font-mono text-[11px] text-slate-400' },
               ].map(({ label, value, extraCls }) => (
                 <div key={label}>
                   <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">{label}</p>
@@ -345,16 +441,105 @@ export default function WorkflowPage({
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button type="button" onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg">Close</button>
-              <button type="button" disabled={!decision} onClick={handleConfirm}
+              <button type="button" disabled={!decision || saving} onClick={handleConfirm}
                 className={`px-5 py-2 text-xs font-semibold text-white rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
                   decision === 'Rejected' ? 'bg-rose-600 hover:bg-rose-700' : clr.btn
                 }`}>
-                Confirm {decision || 'Decision'}
+                {saving ? 'Saving...' : `Confirm ${decision || 'Decision'}`}
               </button>
             </div>
           </div>
         </Modal>
-      )}
+        );
+      })()}
+
+      {/* View Details Modal (Read-Only) */}
+      {isViewModalOpen && viewGroup.length > 0 && (() => {
+        const viewPrimary = viewGroup[0];
+        const viewIsGroup = viewGroup.length > 1;
+        const viewTotalPoValueSum = viewGroup.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+
+        return (
+        <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)}
+          title={`Order Details — ${viewPrimary.doNumber || ''}${viewIsGroup ? ` + ${viewGroup.length - 1} more` : ''}`} maxWidth="max-w-2xl">
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs">
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">DO Number{viewIsGroup ? 's' : ''}</p>
+                <p className="font-bold text-indigo-600 font-mono text-sm">{viewGroup.map((o) => o.doNumber).join(', ') || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Party PO No.</p>
+                <p className="font-semibold text-slate-800">{viewPrimary.partyPoNo || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Party Name</p>
+                <p className="font-semibold text-slate-800">{viewPrimary.partyNames || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Sales Person</p>
+                <p className="text-slate-700">{viewPrimary.salesPersonName || '—'}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-1">
+                  Product{viewIsGroup ? `s (${viewGroup.length})` : ''}
+                </p>
+                <div className="space-y-1">
+                  {viewGroup.map((o, idx) => (
+                    <p key={o.rowIndex ?? idx} className="text-slate-700">
+                      {viewIsGroup && <span className="font-mono font-bold text-indigo-600 mr-1.5">{o.doNumber}</span>}
+                      {o.productName || '—'} — {o.quantity ? Number(o.quantity).toLocaleString('en-IN') : '—'}
+                      {' @ '}{o.rateOfMaterial ? `₹${Number(o.rateOfMaterial).toLocaleString('en-IN')}` : '—'}
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Total PO Value{viewIsGroup ? ' (All Products)' : ''}</p>
+                <p className="font-bold text-emerald-700">{viewTotalPoValueSum ? `₹${viewTotalPoValueSum.toLocaleString('en-IN')}` : '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Type Of Transporting</p>
+                <p className="text-slate-700">{viewPrimary.typeOfTransporting || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Payment To Be Taken</p>
+                <p className="text-slate-700">{viewPrimary.paymentToBeTaken || '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">TC Required</p>
+                <p className="text-slate-700">{viewPrimary.tcRequired || '—'}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Upload SO</p>
+                {viewPrimary.uploadSo && viewPrimary.uploadSo.startsWith('http') ? (
+                  <a
+                    href={viewPrimary.uploadSo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
+                  >
+                    Open SO <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <p className="text-slate-700">—</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsViewModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
+        );
+      })()}
     </div>
   );
 }

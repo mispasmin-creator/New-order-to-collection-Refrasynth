@@ -39,7 +39,7 @@ export default function CheckPOPage() {
   // (more than one when several products were submitted under the same PO)
   const [checkGroup, setCheckGroup] = useState([]);
   const [checkForm, setCheckForm] = useState({ status: '', expectedDeliveryDate: '', remark: '' });
-  const [statusFilter, setStatusFilter] = useState('Pending'); // 'Pending' | 'Approved' | 'All'
+  const [statusFilter, setStatusFilter] = useState('Pending'); // 'Pending' | 'History'
 
   // Fetch Orders from Google Sheet FMS tab
   const fetchOrders = async (showSync = false) => {
@@ -79,10 +79,9 @@ export default function CheckPOPage() {
         (order.customerCategory && order.customerCategory === categoryFilter);
 
       const matchesStatus =
-        statusFilter === 'All' ||
-        (statusFilter === 'Pending' && (!order.status1 || order.status1 === '')) ||
-        (statusFilter === 'Approved' && (order.status1 === 'Approved' || order.status1 === 'Yes')) ||
-        (statusFilter === 'Rejected' && order.status1 === 'Rejected');
+        statusFilter === 'History'
+          ? Boolean(order.status1)
+          : !order.status1;
 
       const q = searchQuery.toLowerCase();
       const matchesSearch =
@@ -333,29 +332,18 @@ export default function CheckPOPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Pending Check ({orders.filter((o) => !o.status1 || o.status1 === '').length})
+              Pending ({orders.filter((o) => !o.status1).length})
             </button>
             <button
               type="button"
-              onClick={() => setStatusFilter('Approved')}
+              onClick={() => setStatusFilter('History')}
               className={`px-3 py-1.5 rounded-lg transition-all ${
-                statusFilter === 'Approved'
-                  ? 'bg-white text-emerald-600 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Approved ({orders.filter((o) => o.status1 === 'Approved' || o.status1 === 'Yes').length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('All')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
-                statusFilter === 'All'
+                statusFilter === 'History'
                   ? 'bg-white text-slate-800 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              All Orders ({orders.length})
+              History ({orders.filter((o) => Boolean(o.status1)).length})
             </button>
           </div>
         </div>
