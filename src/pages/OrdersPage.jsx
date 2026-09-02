@@ -137,6 +137,17 @@ const emptyOrderForm = {
   tcRequired: '',
 };
 
+const emptyProductRow = {
+  productName: '',
+  quantity: '',
+  typeOfMeasurement: '',
+  rateOfMaterial: '',
+  totalPoBasicValue: '',
+  aluminaPct: '',
+  ironPct: '',
+  typeOfApplication: '',
+};
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -157,6 +168,10 @@ export default function OrdersPage() {
   const [formData, setFormData] = useState(emptyOrderForm);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Multiple product line items for the "Add New Order" flow (each becomes its own
+  // Delivery Order row in the sheet, sharing the rest of the PO/party/commercial data)
+  const [products, setProducts] = useState([{ ...emptyProductRow }]);
 
   // Dynamic Master Tab Data from Google Sheets
   const [masterData, setMasterData] = useState({});
@@ -240,6 +255,33 @@ export default function OrdersPage() {
     updated.totalPoValue = basicVal > 0 ? totalVal : '';
 
     setFormData(updated);
+  };
+
+  // Add a new blank product line (max 20 products per PO submission)
+  const handleAddProductRow = () => {
+    if (products.length >= 20) return;
+    setProducts((prev) => [...prev, { ...emptyProductRow }]);
+  };
+
+  // Remove a product line
+  const handleRemoveProductRow = (idx) => {
+    if (products.length <= 1) return;
+    setProducts((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // Update a field on a specific product line, auto-computing its Basic Value (Qty × Rate)
+  const handleProductFieldChange = (idx, field, value) => {
+    setProducts((prev) => {
+      const updated = [...prev];
+      const row = { ...updated[idx], [field]: value };
+      if (field === 'quantity' || field === 'rateOfMaterial') {
+        const q = parseFloat(field === 'quantity' ? value : row.quantity) || 0;
+        const r = parseFloat(field === 'rateOfMaterial' ? value : row.rateOfMaterial) || 0;
+        row.totalPoBasicValue = q * r ? Math.round(q * r) : '';
+      }
+      updated[idx] = row;
+      return updated;
+    });
   };
 
   // Filtered orders list
@@ -410,39 +452,88 @@ export default function OrdersPage() {
       ...emptyOrderForm,
       doNumber: autoDo,
     });
+    setProducts([{ ...emptyProductRow }]);
     setIsAddModalOpen(true);
   };
 
-  // Submit Add Order
+  // Submit Add Order — inserts ONE Delivery Order row per product line, all sharing
+  // the same party/commercial/logistics data, with sequential auto-generated DO numbers
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
 
     try {
-      const res = await api.addOrder(formData);
-      if (res && res.success) {
-        // Optimistically add to UI
-        const optimisticOrder = {
-          ...formData,
-          orderId: formData.doNumber,
-          customerName: formData.partyNames,
-          product: formData.productName,
-          amount: Number(formData.totalPoValue) || Number(formData.totalPoBasicValue) || 0,
-          orderDate: formData.partyPoDate,
-          rowIndex: orders.length + 2,
-        };
-        setOrders((prev) => [optimisticOrder, ...prev]);
+      const validProducts = products.filter(
+        (p) => p.productName && p.quantity && p.rateOfMaterial
+      );
 
-        setIsAddModalOpen(false);
-        notifySuccess(res.message || `Delivery Order ${formData.doNumber} added successfully!`);
-
-        setTimeout(() => {
-          fetchOrders(false);
-        }, 1500);
-      } else {
-        setError(res?.error || 'Failed to add order to Google Sheet.');
+      if (validProducts.length === 0) {
+        setError('Please add at least one product with Product Name, Quantity, and Rate Of Material.');
+        setSubmitting(false);
+        return;
       }
+
+      const adj = parseFloat(formData.adjustedAmount) || 0;
+      let workingOrders = [...orders];
+      const optimisticOrders = [];
+      const assignedDoNumbers = [];
+
+      for (const p of validProducts) {
+        const nextDo = generateNextDoNumber(workingOrders);
+        const q = parseFloat(p.quantity) || 0;
+        const r = parseFloat(p.rateOfMaterial) || 0;
+        const basicVal = Math.round(q * r);
+        const totalVal = basicVal > 0 ? Math.round(basicVal * 1.18) + adj : Number(formData.totalPoValue) || 0;
+
+        const orderData = {
+          ...formData,
+          doNumber: nextDo,
+          productName: p.productName,
+          quantity: p.quantity,
+          typeOfMeasurement: p.typeOfMeasurement,
+          rateOfMaterial: p.rateOfMaterial,
+          totalPoBasicValue: basicVal || p.totalPoBasicValue,
+          basic: basicVal || p.totalPoBasicValue,
+          aluminaPct: p.aluminaPct,
+          ironPct: p.ironPct,
+          typeOfApplication: p.typeOfApplication,
+          totalPoValue: totalVal,
+        };
+
+        const res = await api.addOrder(orderData);
+        if (!res || !res.success) {
+          setError(res?.error || `Failed to add order ${nextDo} to Google Sheet.`);
+          setSubmitting(false);
+          return;
+        }
+
+        assignedDoNumbers.push(nextDo);
+        workingOrders = [...workingOrders, { doNumber: nextDo }];
+        optimisticOrders.push({
+          ...orderData,
+          orderId: nextDo,
+          customerName: orderData.partyNames,
+          product: orderData.productName,
+          amount: Number(orderData.totalPoValue) || Number(orderData.totalPoBasicValue) || 0,
+          orderDate: orderData.partyPoDate,
+          rowIndex: orders.length + optimisticOrders.length + 2,
+        });
+      }
+
+      // Optimistically add all new rows to UI
+      setOrders((prev) => [...optimisticOrders, ...prev]);
+
+      setIsAddModalOpen(false);
+      notifySuccess(
+        assignedDoNumbers.length > 1
+          ? `${assignedDoNumbers.length} Delivery Orders added successfully: ${assignedDoNumbers.join(', ')}!`
+          : `Delivery Order ${assignedDoNumbers[0]} added successfully!`
+      );
+
+      setTimeout(() => {
+        fetchOrders(false);
+      }, 1500);
     } catch (err) {
       setError(err.message || 'Error adding order.');
     } finally {
@@ -942,6 +1033,11 @@ export default function OrdersPage() {
                     value={formData.doNumber}
                     className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700 cursor-not-allowed"
                   />
+                  {isAddModalOpen && products.length > 1 && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Starting DO number — each product below gets its own sequential DO number.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1124,143 +1220,318 @@ export default function OrdersPage() {
 
             {/* SECTION 3: PRODUCT & TECHNICAL SPECS */}
             <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 pb-2 border-b border-slate-200 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                <span>3. Product & Technical Specifications</span>
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <SearchableSelect
-                    label="Product Name"
-                    required
-                    options={productOptions}
-                    value={formData.productName}
-                    onChange={(val) => setFormData({ ...formData, productName: val })}
-                    placeholder="Select or search Product Name..."
-                    searchPlaceholder="Type to search product..."
-                    allowCustom={true}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Quantity *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={formData.quantity}
-                    onChange={(e) => handleQtyRateChange('quantity', e.target.value)}
-                    placeholder="1200"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <SearchableSelect
-                    label="Type Of Measurement"
-                    required
-                    options={measurementOptions}
-                    value={formData.typeOfMeasurement}
-                    onChange={(val) => setFormData({ ...formData, typeOfMeasurement: val })}
-                    placeholder="Select measurement unit..."
-                    searchPlaceholder="Type to search unit..."
-                    allowCustom={true}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Rate Of Material (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={formData.rateOfMaterial}
-                    onChange={(e) => handleQtyRateChange('rateOfMaterial', e.target.value)}
-                    placeholder="300"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Total PO Basic Value (Auto: Qty × Rate)
-                  </label>
-                  <input
-                    type="number"
-                    readOnly
-                    value={formData.totalPoBasicValue}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Alumina%
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.aluminaPct}
-                    onChange={(e) => setFormData({ ...formData, aluminaPct: e.target.value })}
-                    placeholder="e.g. 70%, 80%"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Iron%
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.ironPct}
-                    onChange={(e) => setFormData({ ...formData, ironPct: e.target.value })}
-                    placeholder="e.g. < 1.5%"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                    Type Of Application
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.typeOfApplication}
-                    onChange={(e) => setFormData({ ...formData, typeOfApplication: e.target.value })}
-                    placeholder="e.g. Ladle, Tundish, Rotary Kiln, Boiler"
-                    className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <SearchableSelect
-                      label="TC Required"
-                      options={tcRequiredOptions}
-                      value={formData.tcRequired}
-                      onChange={(val) => setFormData({ ...formData, tcRequired: val })}
-                      placeholder="Select..."
-                      searchPlaceholder="Search..."
-                      allowCustom={false}
-                    />
-                  </div>
-                  <div>
-                    <SearchableSelect
-                      label="Free Replacement (FOC)"
-                      options={freeReplacementOptions}
-                      value={formData.freeReplacementFoc}
-                      onChange={(val) => setFormData({ ...formData, freeReplacementFoc: val })}
-                      placeholder="Select..."
-                      searchPlaceholder="Search..."
-                      allowCustom={false}
-                    />
-                  </div>
-                </div>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-600" />
+                  <span>3. Product & Technical Specifications</span>
+                </h4>
+                {isAddModalOpen && (
+                  <button
+                    type="button"
+                    onClick={handleAddProductRow}
+                    disabled={products.length >= 20}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-indigo-700 hover:bg-indigo-50 shadow-2xs disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Product
+                  </button>
+                )}
               </div>
+
+              {isAddModalOpen ? (
+                <div className="space-y-4">
+                  {products.map((p, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 relative"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Product {idx + 1}
+                        </span>
+                        {products.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProductRow(idx)}
+                            className="text-rose-400 hover:text-rose-600 transition-colors p-0.5 rounded"
+                            title="Remove Product"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                          <SearchableSelect
+                            label="Product Name"
+                            required
+                            options={productOptions}
+                            value={p.productName}
+                            onChange={(val) => handleProductFieldChange(idx, 'productName', val)}
+                            placeholder="Select or search Product Name..."
+                            searchPlaceholder="Type to search product..."
+                            allowCustom={true}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            required
+                            value={p.quantity}
+                            onChange={(e) => handleProductFieldChange(idx, 'quantity', e.target.value)}
+                            placeholder="1200"
+                            className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <div>
+                          <SearchableSelect
+                            label="Type Of Measurement"
+                            required
+                            options={measurementOptions}
+                            value={p.typeOfMeasurement}
+                            onChange={(val) => handleProductFieldChange(idx, 'typeOfMeasurement', val)}
+                            placeholder="Select measurement unit..."
+                            searchPlaceholder="Type to search unit..."
+                            allowCustom={true}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Rate Of Material (₹) *
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            required
+                            value={p.rateOfMaterial}
+                            onChange={(e) => handleProductFieldChange(idx, 'rateOfMaterial', e.target.value)}
+                            placeholder="300"
+                            className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Total PO Basic Value (Auto: Qty × Rate)
+                          </label>
+                          <input
+                            type="number"
+                            readOnly
+                            value={p.totalPoBasicValue}
+                            className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-800"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Alumina%
+                          </label>
+                          <input
+                            type="text"
+                            value={p.aluminaPct}
+                            onChange={(e) => handleProductFieldChange(idx, 'aluminaPct', e.target.value)}
+                            placeholder="e.g. 70%, 80%"
+                            className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Iron%
+                          </label>
+                          <input
+                            type="text"
+                            value={p.ironPct}
+                            onChange={(e) => handleProductFieldChange(idx, 'ironPct', e.target.value)}
+                            placeholder="e.g. < 1.5%"
+                            className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                            Type Of Application
+                          </label>
+                          <input
+                            type="text"
+                            value={p.typeOfApplication}
+                            onChange={(e) => handleProductFieldChange(idx, 'typeOfApplication', e.target.value)}
+                            placeholder="e.g. Ladle, Tundish, Rotary Kiln, Boiler"
+                            className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <SearchableSelect
+                        label="TC Required"
+                        options={tcRequiredOptions}
+                        value={formData.tcRequired}
+                        onChange={(val) => setFormData({ ...formData, tcRequired: val })}
+                        placeholder="Select..."
+                        searchPlaceholder="Search..."
+                        allowCustom={false}
+                      />
+                    </div>
+                    <div>
+                      <SearchableSelect
+                        label="Free Replacement (FOC)"
+                        options={freeReplacementOptions}
+                        value={formData.freeReplacementFoc}
+                        onChange={(val) => setFormData({ ...formData, freeReplacementFoc: val })}
+                        placeholder="Select..."
+                        searchPlaceholder="Search..."
+                        allowCustom={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <SearchableSelect
+                      label="Product Name"
+                      required
+                      options={productOptions}
+                      value={formData.productName}
+                      onChange={(val) => setFormData({ ...formData, productName: val })}
+                      placeholder="Select or search Product Name..."
+                      searchPlaceholder="Type to search product..."
+                      allowCustom={true}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Quantity *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.quantity}
+                      onChange={(e) => handleQtyRateChange('quantity', e.target.value)}
+                      placeholder="1200"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <SearchableSelect
+                      label="Type Of Measurement"
+                      required
+                      options={measurementOptions}
+                      value={formData.typeOfMeasurement}
+                      onChange={(val) => setFormData({ ...formData, typeOfMeasurement: val })}
+                      placeholder="Select measurement unit..."
+                      searchPlaceholder="Type to search unit..."
+                      allowCustom={true}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Rate Of Material (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={formData.rateOfMaterial}
+                      onChange={(e) => handleQtyRateChange('rateOfMaterial', e.target.value)}
+                      placeholder="300"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Total PO Basic Value (Auto: Qty × Rate)
+                    </label>
+                    <input
+                      type="number"
+                      readOnly
+                      value={formData.totalPoBasicValue}
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-800"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Alumina%
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.aluminaPct}
+                      onChange={(e) => setFormData({ ...formData, aluminaPct: e.target.value })}
+                      placeholder="e.g. 70%, 80%"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Iron%
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ironPct}
+                      onChange={(e) => setFormData({ ...formData, ironPct: e.target.value })}
+                      placeholder="e.g. < 1.5%"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                      Type Of Application
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.typeOfApplication}
+                      onChange={(e) => setFormData({ ...formData, typeOfApplication: e.target.value })}
+                      placeholder="e.g. Ladle, Tundish, Rotary Kiln, Boiler"
+                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <SearchableSelect
+                        label="TC Required"
+                        options={tcRequiredOptions}
+                        value={formData.tcRequired}
+                        onChange={(val) => setFormData({ ...formData, tcRequired: val })}
+                        placeholder="Select..."
+                        searchPlaceholder="Search..."
+                        allowCustom={false}
+                      />
+                    </div>
+                    <div>
+                      <SearchableSelect
+                        label="Free Replacement (FOC)"
+                        options={freeReplacementOptions}
+                        value={formData.freeReplacementFoc}
+                        onChange={(val) => setFormData({ ...formData, freeReplacementFoc: val })}
+                        placeholder="Select..."
+                        searchPlaceholder="Search..."
+                        allowCustom={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* SECTION 4: COMMERCIAL & PAYMENT TERMS */}
