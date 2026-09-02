@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight, Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -48,8 +48,8 @@ export default function LoginPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10">
         {/* Brand Logo & Title */}
         <div className="flex items-center justify-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
-            <ShieldCheck className="w-7 h-7" />
+          <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shadow-lg shadow-indigo-500/30 p-1.5">
+            <img src="/icons.png" alt="Refrasynth" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-white m-0">Refrasynth</h1>

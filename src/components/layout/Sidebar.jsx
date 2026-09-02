@@ -2,34 +2,31 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getSidebarItems, renderNavIcon } from '../../config/navigation';
-import { LogOut, Layers, Shield } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 export default function Sidebar() {
-  const { user, logout, isMockMode } = useAuth();
+  const { user, logout } = useAuth();
   const sidebarItems = getSidebarItems();
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 h-screen sticky top-0">
       {/* Brand Header */}
       <div className="h-16 px-6 border-b border-slate-100 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-200">
-          <Layers className="w-5 h-5" />
+        <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm p-1">
+          <img src="/icons.png" alt="Refrasynth" className="w-full h-full object-contain" />
         </div>
         <div className="flex flex-col">
           <span className="font-bold text-slate-800 text-base leading-tight tracking-tight">
             Refrasynth
           </span>
           <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600">
-            Order to Collection
+            {/* subtext removed if not needed */}
           </span>
         </div>
       </div>
 
-      {/* Navigation Links (Driven directly by navigation.jsx config) */}
+      {/* Navigation Links */}
       <div className="flex-1 py-5 px-3 overflow-y-auto space-y-1">
-        <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-          Main Menu
-        </div>
         {sidebarItems.map((item) => (
           <NavLink
             key={item.id}
@@ -61,21 +58,6 @@ export default function Sidebar() {
             )}
           </NavLink>
         ))}
-      </div>
-
-      {/* Connection Mode Indicator */}
-      <div className="px-4 py-3 mx-3 mb-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-        <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 mb-1">
-          <span>Backend Link</span>
-          <span
-            className={`inline-block w-2 h-2 rounded-full ${
-              isMockMode ? 'bg-amber-400' : 'bg-emerald-500 animate-pulse'
-            }`}
-          />
-        </div>
-        <div className="font-semibold text-slate-700 truncate">
-          {isMockMode ? 'Local Demo Mode' : 'Google Sheets API'}
-        </div>
       </div>
 
       {/* User Section & Logout Button at Bottom */}
