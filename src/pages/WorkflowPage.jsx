@@ -175,36 +175,38 @@ export default function WorkflowPage({
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl ${clr.btn} text-white shadow-sm`}>{pageIcon}</div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">{pageTitle}</h1>
-            <p className="text-xs text-slate-500">{filteredOrders.length} orders - synced from Google Sheets</p>
+      <div className="sticky top-0 z-30 bg-slate-50 -mx-4 -mt-4 px-4 pt-4 pb-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${clr.btn} text-white shadow-sm`}>{pageIcon}</div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-800">{pageTitle}</h1>
+              <p className="text-xs text-slate-500">{filteredOrders.length} orders - synced from Google Sheets</p>
+            </div>
           </div>
+          <button onClick={() => fetchOrders(true)} disabled={syncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Refresh'}
+          </button>
         </div>
-        <button onClick={() => fetchOrders(true)} disabled={syncing}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50">
-          <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-          {syncing ? 'Syncing...' : 'Refresh'}
-        </button>
-      </div>
 
-      {successNotice && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-medium">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> {successNotice}
-        </div>
-      )}
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
-          <AlertCircle className="w-4 h-4 shrink-0" /> {error}
-        </div>
-      )}
+        {successNotice && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> {successNotice}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">
+            <AlertCircle className="w-4 h-4 shrink-0" /> {error}
+          </div>
+        )}
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-        <input type="text" placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input type="text" placeholder="Search orders..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

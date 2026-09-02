@@ -283,87 +283,90 @@ export default function ManageUsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 m-0 flex items-center gap-2.5">
-            <Users className="w-7 h-7 text-indigo-600" />
-            <span>Manage Users</span>
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Real-time credentials, roles, firm access, and page permissions from Google Sheets (<strong>Users</strong> tab)
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => fetchUsers(true)}
-            disabled={syncing || loading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-2xs transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
-            <span>{syncing ? 'Syncing...' : 'Sync Sheet'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200 transition-all"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add New User</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Success Notification */}
-      {successNotice && (
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3.5 text-sm text-emerald-800 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successNotice}</span>
-        </div>
-      )}
-
-      {/* Error Alert */}
-      {error && (
-        <div className="rounded-lg bg-rose-50 border border-rose-200 p-3.5 text-sm text-rose-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Search & Filter Card */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Search */}
-        <div className="relative flex-1">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-            <Search className="w-4 h-4" />
+      {/* Sticky Page Header + Alerts + Filters (stays fixed while table scrolls) */}
+      <div className="sticky top-0 z-30 bg-slate-50 -mt-6 pt-6 pb-1 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-800 m-0 flex items-center gap-2.5">
+              <Users className="w-7 h-7 text-indigo-600" />
+              <span>Manage Users</span>
+            </h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Real-time credentials, roles, firm access, and page permissions from Google Sheets (<strong>Users</strong> tab)
+            </p>
           </div>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by User Name, Role, Firm Access, or Permission..."
-            className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-          />
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fetchUsers(true)}
+              disabled={syncing || loading}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-2xs transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
+              <span>{syncing ? 'Syncing...' : 'Sync Sheet'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-sm shadow-indigo-200 transition-all"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add New User</span>
+            </button>
+          </div>
         </div>
 
-        {/* Role Filter */}
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <Shield className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-semibold uppercase text-slate-400">Role:</span>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="All">All Roles</option>
-            <option value="Admin">Admin</option>
-            <option value="Manager">Manager</option>
-            <option value="Operations Head">Operations Head</option>
-            <option value="Staff">Staff</option>
-          </select>
+        {/* Success Notification */}
+        {successNotice && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3.5 text-sm text-emerald-800 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successNotice}</span>
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && (
+          <div className="rounded-lg bg-rose-50 border border-rose-200 p-3.5 text-sm text-rose-800 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Search & Filter Card */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {/* Search */}
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <Search className="w-4 h-4" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by User Name, Role, Firm Access, or Permission..."
+              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Role Filter */}
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Shield className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-semibold uppercase text-slate-400">Role:</span>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="All">All Roles</option>
+              <option value="Admin">Admin</option>
+              <option value="Manager">Manager</option>
+              <option value="Operations Head">Operations Head</option>
+              <option value="Staff">Staff</option>
+            </select>
+          </div>
         </div>
       </div>
 
