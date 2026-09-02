@@ -712,6 +712,9 @@ export default function OrdersPage() {
           <table className="w-full text-left text-xs text-slate-600 border-collapse">
             <thead className="sticky top-0 bg-slate-100 z-20 shadow-xs border-b border-slate-300 font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
               <tr>
+                <th className="sticky left-0 bg-slate-100 z-30 px-3.5 py-3 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                  Actions
+                </th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Timestamp</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">DO-Delivery Order No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">PARTY PO NO (As Per Po Exact)</th>
@@ -755,14 +758,14 @@ export default function OrdersPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="37" className="py-20 text-center text-slate-400">
+                  <td colSpan="38" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                     <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="37" className="py-16 text-center text-slate-400">
+                  <td colSpan="38" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">No orders recorded in Google Sheets yet</h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -775,6 +778,36 @@ export default function OrdersPage() {
               ) : (
                 filteredOrders.map((order, idx) => (
                   <tr key={order.doNumber || idx} className="hover:bg-slate-50/80 transition-colors">
+                    {/* Sticky Actions */}
+                    <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenView(order)}
+                          title="View Full Details"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(order)}
+                          title="Edit Order"
+                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDelete(order)}
+                          title="Delete Order"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+
                     {/* 0. Timestamp */}
                     <td className="px-3.5 py-3 whitespace-nowrap text-slate-500 text-[11px] font-mono">
                       {api.formatDate(order.timestamp) || '—'}
