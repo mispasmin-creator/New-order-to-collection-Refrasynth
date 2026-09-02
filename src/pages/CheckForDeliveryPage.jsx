@@ -36,13 +36,16 @@ export default function CheckForDeliveryPage() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewGroup, setViewGroup]             = useState([]);
 
-  // Form Fields State
-  const [inStockOrNot, setInStockOrNot]                       = useState('');
-  const [orderNumberOfProduction, setOrderNumberOfProduction] = useState('');
-  const [qtyTransferred, setQtyTransferred]                   = useState('');
-  const [batchNumberRemarks, setBatchNumberRemarks]           = useState('');
-  const [gpPercent, setGpPercent]                             = useState('');
-  const [selfOrderNoIndentNo, setSelfOrderNoIndentNo]         = useState('');
+  // Form Fields State — keyed per DO number so each product in a grouped PO
+  // can have its own independent In Stock Or Not status + conditional fields
+  const [productForms, setProductForms] = useState({}); // { [doNumber]: { inStockOrNot, orderNumberOfProduction, qtyTransferred, batchNumberRemarks, gpPercent, selfOrderNoIndentNo } }
+
+  const updateProductForm = (doNumber, field, value) => {
+    setProductForms((prev) => ({
+      ...prev,
+      [doNumber]: { ...prev[doNumber], [field]: value },
+    }));
+  };
 
   // Fetch orders from Google Sheets FMS tab
   const fetchOrders = async (showSync = false) => {
@@ -169,17 +172,22 @@ export default function CheckForDeliveryPage() {
     [eligibleOrders]
   );
 
-  // Open modal and initialize fields — accepts a single order or a group sharing one PO
+  // Open modal and initialize per-product fields — accepts a single order or a group sharing one PO
   const handleOpenModal = (orderOrGroup) => {
     const rows = Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup];
-    const order = rows[0];
     setActiveGroup(rows);
-    setInStockOrNot(order.inStockOrNot || '');
-    setOrderNumberOfProduction(order.orderNumberOfProduction || '');
-    setQtyTransferred(order.qtyTransferred || '');
-    setBatchNumberRemarks(order.batchNumberRemarks || '');
-    setGpPercent(order.gpPercent || '');
-    setSelfOrderNoIndentNo(order.selfOrderNoIndentNo || '');
+    const forms = {};
+    rows.forEach((o) => {
+      forms[o.doNumber] = {
+        inStockOrNot: o.inStockOrNot || '',
+        orderNumberOfProduction: o.orderNumberOfProduction || '',
+        qtyTransferred: o.qtyTransferred || '',
+        batchNumberRemarks: o.batchNumberRemarks || '',
+        gpPercent: o.gpPercent || '',
+        selfOrderNoIndentNo: o.selfOrderNoIndentNo || '',
+      };
+    });
+    setProductForms(forms);
     setIsModalOpen(true);
   };
 
@@ -189,9 +197,14 @@ export default function CheckForDeliveryPage() {
     setIsViewModalOpen(true);
   };
 
-  // Submit Entry — applies to every DO in activeGroup at once
+  // Every product in the active group must have its own In Stock Or Not status selected
+  const allProductsStatusSet =
+    activeGroup.length > 0 &&
+    activeGroup.every((o) => Boolean(productForms[o.doNumber]?.inStockOrNot));
+
+  // Submit Entry — writes each DO's OWN status/fields to that DO's row
   const handleSubmitEntry = async () => {
-    if (activeGroup.length === 0 || !inStockOrNot) return;
+    if (activeGroup.length === 0 || !allProductsStatusSet) return;
     setSubmitting(true);
     try {
       // IST timestamp format: dd/MM/yyyy HH:mm:ss
@@ -199,18 +212,20 @@ export default function CheckForDeliveryPage() {
       const pad = (n) => String(n).padStart(2, '0');
       const istTime = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-      const updatePayload = {
-        'Actual 3': istTime,
-        'In Stock Or Not': inStockOrNot,
-        'Self Order No/ Indent No.': selfOrderNoIndentNo || '',
-        'Order Number Of The Production': orderNumberOfProduction || '',
-        'Qty Transfered': qtyTransferred || '',
-        'Batch Number In Remarks': batchNumberRemarks || '',
-        'GP %': gpPercent || '',
-      };
-
       const results = await Promise.all(
-        activeGroup.map((o) => api.updateOrderFields(o.rowIndex, updatePayload, o.doNumber))
+        activeGroup.map((o) => {
+          const f = productForms[o.doNumber] || {};
+          const updatePayload = {
+            'Actual 3': istTime,
+            'In Stock Or Not': f.inStockOrNot || '',
+            'Self Order No/ Indent No.': f.selfOrderNoIndentNo || '',
+            'Order Number Of The Production': f.orderNumberOfProduction || '',
+            'Qty Transfered': f.qtyTransferred || '',
+            'Batch Number In Remarks': f.batchNumberRemarks || '',
+            'GP %': f.gpPercent || '',
+          };
+          return api.updateOrderFields(o.rowIndex, updatePayload, o.doNumber);
+        })
       );
       const failed = results.find((r) => !r || !r.success);
 
@@ -224,20 +239,20 @@ export default function CheckForDeliveryPage() {
 
         // Update local order list so orders immediately move to next stage
         setOrders((prev) =>
-          prev.map((o) =>
-            doNumbers.includes(o.doNumber)
-              ? {
-                  ...o,
-                  actual3: istTime,
-                  inStockOrNot,
-                  selfOrderNoIndentNo,
-                  orderNumberOfProduction,
-                  qtyTransferred,
-                  batchNumberRemarks,
-                  gpPercent,
-                }
-              : o
-          )
+          prev.map((o) => {
+            const f = productForms[o.doNumber];
+            if (!f) return o;
+            return {
+              ...o,
+              actual3: istTime,
+              inStockOrNot: f.inStockOrNot,
+              selfOrderNoIndentNo: f.selfOrderNoIndentNo,
+              orderNumberOfProduction: f.orderNumberOfProduction,
+              qtyTransferred: f.qtyTransferred,
+              batchNumberRemarks: f.batchNumberRemarks,
+              gpPercent: f.gpPercent,
+            };
+          })
         );
 
         setIsModalOpen(false);
@@ -251,13 +266,15 @@ export default function CheckForDeliveryPage() {
     }
   };
 
-  // Helper to normalize selection comparison
-  const cleanSelected = inStockOrNot.trim().toLowerCase();
-  const isInStock = cleanSelected === 'in stock';
-  const isForProduction =
-    cleanSelected === 'for production planning' || cleanSelected.includes('production');
-  const isFromPurchase =
-    cleanSelected === 'from purchase' || cleanSelected.includes('purchase');
+  // Helper to normalize a status string for conditional-field matching
+  const statusFlags = (status) => {
+    const cleaned = String(status || '').trim().toLowerCase();
+    return {
+      isInStock: cleaned === 'in stock',
+      isForProduction: cleaned === 'for production planning' || cleaned.includes('production'),
+      isFromPurchase: cleaned === 'from purchase' || cleaned.includes('purchase'),
+    };
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 space-y-4">
@@ -564,114 +581,132 @@ export default function CheckForDeliveryPage() {
               )}
             </div>
 
-            {/* 2. In Stock Or Not Dropdown (from Master Tab) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                In Stock Or Not <span className="text-rose-500">*</span>
-              </label>
-              <select
-                value={inStockOrNot}
-                onChange={(e) => setInStockOrNot(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
-              >
-                <option value="">Select In Stock status...</option>
-                {stockOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
+            {/* 2. Per-Product In Stock Or Not + Conditional Inputs */}
+            <div className="space-y-4">
+              {activeGroup.map((o, idx) => {
+                const f = productForms[o.doNumber] || {};
+                const { isInStock, isForProduction, isFromPurchase } = statusFlags(f.inStockOrNot);
+                return (
+                  <div
+                    key={o.rowIndex ?? idx}
+                    className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
+                  >
+                    {activeIsGroup && (
+                      <p className="text-xs font-bold text-indigo-600 font-mono">
+                        {o.doNumber} <span className="text-slate-500 font-sans font-normal">— {o.productName || '—'}</span>
+                      </p>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                        In Stock Or Not <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        value={f.inStockOrNot || ''}
+                        onChange={(e) => updateProductForm(o.doNumber, 'inStockOrNot', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
+                      >
+                        <option value="">Select In Stock status...</option>
+                        {stockOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {isInStock && (
+                      <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg space-y-3">
+                        <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                          In Stock Details
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Order Number Of Production
+                            </label>
+                            <input
+                              type="text"
+                              value={f.orderNumberOfProduction || ''}
+                              onChange={(e) => updateProductForm(o.doNumber, 'orderNumberOfProduction', e.target.value)}
+                              placeholder="Enter production order number..."
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                              Qty Transferred
+                            </label>
+                            <input
+                              type="number"
+                              value={f.qtyTransferred || ''}
+                              onChange={(e) => updateProductForm(o.doNumber, 'qtyTransferred', e.target.value)}
+                              placeholder="0"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Batch Number Remarks
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={f.batchNumberRemarks || ''}
+                            onChange={(e) => updateProductForm(o.doNumber, 'batchNumberRemarks', e.target.value)}
+                            placeholder="Enter batch number remarks..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {isForProduction && (
+                      <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-lg space-y-3">
+                        <p className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <Percent className="w-3.5 h-3.5 text-amber-600" />
+                          Production Planning Details
+                        </p>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            GP %
+                          </label>
+                          <input
+                            type="text"
+                            value={f.gpPercent || ''}
+                            onChange={(e) => updateProductForm(o.doNumber, 'gpPercent', e.target.value)}
+                            placeholder="e.g. 15% or 15"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {isFromPurchase && (
+                      <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-lg space-y-3">
+                        <p className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          Purchase Details
+                        </p>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1">
+                            Indent / Self Batch Number
+                          </label>
+                          <input
+                            type="text"
+                            value={f.selfOrderNoIndentNo || ''}
+                            onChange={(e) => updateProductForm(o.doNumber, 'selfOrderNoIndentNo', e.target.value)}
+                            placeholder="Enter indent / self batch number..."
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-
-            {/* 3. Conditional Inputs based on In Stock Or Not */}
-            {isInStock && (
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-emerald-600" />
-                  In Stock Details
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Order Number Of Production
-                    </label>
-                    <input
-                      type="text"
-                      value={orderNumberOfProduction}
-                      onChange={(e) => setOrderNumberOfProduction(e.target.value)}
-                      placeholder="Enter production order number..."
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Qty Transferred
-                    </label>
-                    <input
-                      type="number"
-                      value={qtyTransferred}
-                      onChange={(e) => setQtyTransferred(e.target.value)}
-                      placeholder="0"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Batch Number Remarks
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={batchNumberRemarks}
-                    onChange={(e) => setBatchNumberRemarks(e.target.value)}
-                    placeholder="Enter batch number remarks..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {isForProduction && (
-              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Percent className="w-3.5 h-3.5 text-amber-600" />
-                  Production Planning Details
-                </p>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    GP %
-                  </label>
-                  <input
-                    type="text"
-                    value={gpPercent}
-                    onChange={(e) => setGpPercent(e.target.value)}
-                    placeholder="e.g. 15% or 15"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                </div>
-              </div>
-            )}
-
-            {isFromPurchase && (
-              <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
-                <p className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  Purchase Details
-                </p>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Indent / Self Batch Number
-                  </label>
-                  <input
-                    type="text"
-                    value={selfOrderNoIndentNo}
-                    onChange={(e) => setSelfOrderNoIndentNo(e.target.value)}
-                    placeholder="Enter indent / self batch number..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
-                </div>
-              </div>
-            )}
 
             {/* 4. Footer Buttons */}
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
@@ -684,7 +719,7 @@ export default function CheckForDeliveryPage() {
               </button>
               <button
                 type="button"
-                disabled={!inStockOrNot || submitting}
+                disabled={!allProductsStatusSet || submitting}
                 onClick={handleSubmitEntry}
                 className="px-5 py-2 text-xs font-semibold text-white bg-violet-600 hover:bg-violet-700 active:bg-violet-800 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
