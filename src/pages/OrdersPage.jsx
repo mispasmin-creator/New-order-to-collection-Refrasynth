@@ -1044,7 +1044,7 @@ export default function OrdersPage() {
             setIsAddModalOpen(false);
             setIsEditModalOpen(false);
           }}
-          title={isAddModalOpen ? 'Add New Order to Sheet' : `Edit Delivery Order: ${formData.doNumber}`}
+          title={isAddModalOpen ? 'Order Receipt Form' : `Edit Delivery Order: ${formData.doNumber}`}
           maxWidth="max-w-4xl"
         >
           <form onSubmit={isAddModalOpen ? handleAddSubmit : handleEditSubmit} className="space-y-6">
@@ -1082,7 +1082,6 @@ export default function OrdersPage() {
                     required
                     value={formData.partyPoNo}
                     onChange={(e) => setFormData({ ...formData, partyPoNo: e.target.value })}
-                    placeholder="e.g. PO/TSL/2026/8941"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1108,7 +1107,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.referenceNo}
                     onChange={(e) => setFormData({ ...formData, referenceNo: e.target.value })}
-                    placeholder="e.g. REF-2026-09"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1194,7 +1192,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.contactPersonName}
                     onChange={(e) => setFormData({ ...formData, contactPersonName: e.target.value })}
-                    placeholder="e.g. Sanjay Sengupta"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1207,7 +1204,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.contactPersonWhatsapp}
                     onChange={(e) => setFormData({ ...formData, contactPersonWhatsapp: e.target.value })}
-                    placeholder="e.g. 9830123456"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1371,7 +1367,6 @@ export default function OrdersPage() {
                             type="text"
                             value={p.aluminaPct}
                             onChange={(e) => handleProductFieldChange(idx, 'aluminaPct', e.target.value)}
-                            placeholder="e.g. 70%, 80%"
                             className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                           />
                         </div>
@@ -1384,7 +1379,6 @@ export default function OrdersPage() {
                             type="text"
                             value={p.ironPct}
                             onChange={(e) => handleProductFieldChange(idx, 'ironPct', e.target.value)}
-                            placeholder="e.g. < 1.5%"
                             className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                           />
                         </div>
@@ -1397,7 +1391,6 @@ export default function OrdersPage() {
                             type="text"
                             value={p.typeOfApplication}
                             onChange={(e) => handleProductFieldChange(idx, 'typeOfApplication', e.target.value)}
-                            placeholder="e.g. Ladle, Tundish, Rotary Kiln, Boiler"
                             className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                           />
                         </div>
@@ -1508,7 +1501,6 @@ export default function OrdersPage() {
                       type="text"
                       value={formData.aluminaPct}
                       onChange={(e) => setFormData({ ...formData, aluminaPct: e.target.value })}
-                      placeholder="e.g. 70%, 80%"
                       className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                     />
                   </div>
@@ -1521,7 +1513,6 @@ export default function OrdersPage() {
                       type="text"
                       value={formData.ironPct}
                       onChange={(e) => setFormData({ ...formData, ironPct: e.target.value })}
-                      placeholder="e.g. < 1.5%"
                       className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                     />
                   </div>
@@ -1534,7 +1525,6 @@ export default function OrdersPage() {
                       type="text"
                       value={formData.typeOfApplication}
                       onChange={(e) => setFormData({ ...formData, typeOfApplication: e.target.value })}
-                      placeholder="e.g. Ladle, Tundish, Rotary Kiln, Boiler"
                       className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                     />
                   </div>
@@ -1661,7 +1651,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.leadTimeFinalPayment}
                     onChange={(e) => setFormData({ ...formData, leadTimeFinalPayment: e.target.value })}
-                    placeholder="e.g. 30 Days / 45 Days"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1686,7 +1675,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.retentionPercentage}
                     onChange={(e) => setFormData({ ...formData, retentionPercentage: e.target.value })}
-                    placeholder="e.g. 10%"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
@@ -1699,7 +1687,6 @@ export default function OrdersPage() {
                     type="text"
                     value={formData.leadTimeRetention}
                     onChange={(e) => setFormData({ ...formData, leadTimeRetention: e.target.value })}
-                    placeholder="e.g. 6 Months / After Performance"
                     className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
                   />
                 </div>
