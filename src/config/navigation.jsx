@@ -12,19 +12,15 @@ import {
   IndianRupee,
   Truck,
   Boxes,
-  ShieldCheck,
   ClipboardList,
-  BadgeCheck,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
 import CheckPOPage from '../pages/CheckPOPage';
 import ReceivedAccountsPage from '../pages/ReceivedAccountsPage';
 import CheckForDeliveryPage from '../pages/CheckForDeliveryPage';
-import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
-import LogisticsApprovalPage from '../pages/LogisticsApprovalPage';
 import DispatchPlanningPage from '../pages/DispatchPlanningPage';
-import AccountsApprovalPage from '../pages/AccountsApprovalPage';
+import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -39,9 +35,7 @@ export const iconMap = {
   IndianRupee,
   Truck,
   Boxes,
-  ShieldCheck,
   ClipboardList,
-  BadgeCheck,
   Users,
   BarChart3,
   Package,
@@ -108,22 +102,6 @@ export const navConfig = [
     inSidebar: true,
   },
   {
-    id: 'arrange-logistics',
-    label: 'Arrange Logistics',
-    path: '/arrange-logistics',
-    icon: 'Boxes',
-    component: ArrangeLogisticsPage,
-    inSidebar: true,
-  },
-  {
-    id: 'logistics-approval',
-    label: 'Logistics Approval',
-    path: '/logistics-approval',
-    icon: 'ShieldCheck',
-    component: LogisticsApprovalPage,
-    inSidebar: true,
-  },
-  {
     id: 'dispatch-planning',
     label: 'Dispatch Planning',
     path: '/dispatch-planning',
@@ -132,11 +110,11 @@ export const navConfig = [
     inSidebar: true,
   },
   {
-    id: 'accounts-approval',
-    label: 'Accounts Approval',
-    path: '/accounts-approval',
-    icon: 'BadgeCheck',
-    component: AccountsApprovalPage,
+    id: 'arrange-logistics',
+    label: 'Arrange Logistics',
+    path: '/arrange-logistics',
+    icon: 'Boxes',
+    component: ArrangeLogisticsPage,
     inSidebar: true,
   },
   {
