@@ -312,13 +312,15 @@ export const api = {
             folderId,
           });
 
+          // Base64 file data can easily exceed URL length limits, so this must
+          // always go through the request body (POST), never a GET query string.
           let driveUrl = null;
 
-          // Try GET first
           try {
-            const resp = await fetch(`${APPS_SCRIPT_URL}?${params.toString()}`, {
-              method: 'GET',
+            const resp = await fetch(APPS_SCRIPT_URL, {
+              method: 'POST',
               redirect: 'follow',
+              body: params,
             });
             if (resp.ok) {
               const json = await resp.json();
@@ -326,23 +328,20 @@ export const api = {
                 driveUrl = json.fileUrl;
               }
             }
-          } catch (_) { /* fall through to POST */ }
+          } catch (_) { /* fall through to no-cors fallback */ }
 
-          // Try POST if GET failed
+          // Fallback: fire the upload with mode: 'no-cors' so it still reaches
+          // Drive even if the browser blocked the CORS-visible response above.
+          // The response is opaque here, so the Drive URL can't be read back —
+          // the user is prompted to paste it manually via FileUploader's fallback input.
           if (!driveUrl) {
             try {
-              const resp = await fetch(APPS_SCRIPT_URL, {
+              await fetch(APPS_SCRIPT_URL, {
                 method: 'POST',
-                redirect: 'follow',
+                mode: 'no-cors',
                 body: params,
               });
-              if (resp.ok) {
-                const json = await resp.json();
-                if (json?.success && json?.fileUrl) {
-                  driveUrl = json.fileUrl;
-                }
-              }
-            } catch (_) { /* fall through */ }
+            } catch (_) { /* give up, resolve(null) below */ }
           }
 
           resolve(driveUrl);
@@ -694,9 +693,11 @@ export const api = {
             rowIndex       : i + 1,
             timestamp      : formatTimestamp(col(row, 'timestamp', '')),
             doNumber       : doNo,
-            partyPoNo      : col(row, 'partyPoNo', ''),
+            // Sheet cells that look numeric (e.g. a purely-digit PO No.) come back
+            // as JS numbers, not strings — coerce so downstream .trim()/.toLowerCase() are safe.
+            partyPoNo      : String(col(row, 'partyPoNo', '') ?? '').trim(),
             partyPoDate    : formatAppDate(col(row, 'partyPoDate', '')),
-            partyNames     : col(row, 'partyNames', ''),
+            partyNames     : String(col(row, 'partyNames', '') ?? '').trim(),
             productName    : col(row, 'productName', ''),
             quantity       : Number(col(row, 'quantity', 0)) || 0,
             rateOfMaterial : Number(col(row, 'rateOfMaterial', 0)) || 0,

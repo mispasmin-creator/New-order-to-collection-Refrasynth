@@ -8,7 +8,6 @@ import {
   Plus,
   Filter,
   RefreshCw,
-  Edit2,
   Trash2,
   Eye,
   Package,
@@ -159,14 +158,13 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
 
-  // Modals state
+  // Modals state — Edit/Delete are intentionally not offered from the app;
+  // changes to existing rows are made directly in the Google Sheet.
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   const [formData, setFormData] = useState(emptyOrderForm);
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [viewGroup, setViewGroup] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   // Multiple product line items for the "Add New Order" flow (each becomes its own
@@ -240,23 +238,6 @@ export default function OrdersPage() {
     return defaultList;
   };
 
-  // Auto calculate basic value & total value when qty or rate changes
-  const handleQtyRateChange = (field, value) => {
-    const updated = { ...formData, [field]: value };
-    const q = parseFloat(field === 'quantity' ? value : updated.quantity) || 0;
-    const r = parseFloat(field === 'rateOfMaterial' ? value : updated.rateOfMaterial) || 0;
-    const basicVal = Math.round(q * r);
-    updated.totalPoBasicValue = basicVal || '';
-    updated.basic = basicVal || '';
-
-    // Calculate Total PO value including 18% GST estimate if not adjusted
-    const adj = parseFloat(updated.adjustedAmount) || 0;
-    const totalVal = Math.round(basicVal * 1.18) + adj;
-    updated.totalPoValue = basicVal > 0 ? totalVal : '';
-
-    setFormData(updated);
-  };
-
   // Add a new blank product line (max 20 products per PO submission)
   const handleAddProductRow = () => {
     if (products.length >= 20) return;
@@ -302,6 +283,29 @@ export default function OrdersPage() {
       return matchesCategory && matchesSearch;
     });
   }, [orders, searchQuery, categoryFilter]);
+
+  // Group multi-product submissions (same Party PO, same Party, same PO date) into
+  // a single row so one PO with several products reads as one order in the table
+  const groupedOrders = useMemo(() => {
+    const groups = [];
+    const indexByKey = {};
+    filteredOrders.forEach((order) => {
+      // Sheet values can come back as numbers (e.g. a purely numeric PO No.), so
+      // coerce to string before calling string methods.
+      const key = [
+        String(order.partyPoNo ?? '').trim().toLowerCase(),
+        String(order.partyPoDate ?? '').trim(),
+        String(order.partyNames ?? '').trim().toLowerCase(),
+      ].join('|');
+      if (!order.partyPoNo || indexByKey[key] === undefined) {
+        indexByKey[key] = groups.length;
+        groups.push({ key: `${key}-${groups.length}`, orders: [order] });
+      } else {
+        groups[indexByKey[key]].orders.push(order);
+      }
+    });
+    return groups;
+  }, [filteredOrders]);
 
   // Dropdown Options strictly synchronized with Google Sheet Master tab
   const firmOptions = useMemo(() => {
@@ -541,79 +545,10 @@ export default function OrdersPage() {
     }
   };
 
-  // Open Edit Modal
-  const handleOpenEdit = (order) => {
-    setSelectedOrder(order);
-    setFormData({ ...order });
-    setIsEditModalOpen(true);
-  };
-
-  // Submit Edit Order
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedOrder) return;
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const res = await api.updateOrder(selectedOrder.rowIndex, formData);
-      if (res && res.success) {
-        // Optimistically update
-        setOrders((prev) =>
-          prev.map((o) => (o.rowIndex === selectedOrder.rowIndex ? { ...formData } : o))
-        );
-
-        setIsEditModalOpen(false);
-        notifySuccess(res.message || `Order ${formData.doNumber} updated successfully!`);
-
-        setTimeout(() => {
-          fetchOrders(false);
-        }, 1500);
-      } else {
-        setError(res?.error || 'Failed to update order in Google Sheet.');
-      }
-    } catch (err) {
-      setError(err.message || 'Error updating order.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Open Delete Modal
-  const handleOpenDelete = (order) => {
-    setSelectedOrder(order);
-    setIsDeleteModalOpen(true);
-  };
-
-  // Confirm Delete Order
-  const handleDeleteConfirm = async () => {
-    if (!selectedOrder) return;
-    setSubmitting(true);
-    setError('');
-
-    try {
-      const res = await api.deleteOrder(selectedOrder.rowIndex);
-      if (res && res.success) {
-        setOrders((prev) => prev.filter((o) => o.rowIndex !== selectedOrder.rowIndex));
-        setIsDeleteModalOpen(false);
-        notifySuccess(res.message || `Order ${selectedOrder.doNumber} deleted successfully!`);
-
-        setTimeout(() => {
-          fetchOrders(false);
-        }, 1500);
-      } else {
-        setError(res?.error || 'Failed to delete order from Google Sheet.');
-      }
-    } catch (err) {
-      setError(err.message || 'Error deleting order.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Open View Details Modal
-  const handleOpenView = (order) => {
-    setSelectedOrder(order);
+  // Open View Details Modal — accepts either a single order or a group of orders
+  // (multiple products submitted under the same PO) that share one Delivery Order row
+  const handleOpenView = (orderOrGroup) => {
+    setViewGroup(Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup]);
     setIsViewModalOpen(true);
   };
 
@@ -722,37 +657,7 @@ export default function OrdersPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Party Names</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Rate Of Material</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Type Of Transporting</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Upload SO</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Is This Order Through Some Agent</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Order Received From</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Type Of Measurement</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Contact Person Name</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Contact Person WhatsApp No.</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Alumina%</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Iron%</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Type Of PI</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Lead Time For Collection Of Final Payment</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Type Of Application</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Customer Category</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Free Replacement (FOC)</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Gst Number</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Address</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Firm Name</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Basic Value</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Payment to Be Taken</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Advance</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Basic</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Retention Payment</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Retention Percentage</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Lead Time for Retention</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Specific Concern</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Reference No.</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Adjusted Amount</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Marketing Sales Person</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">TC Required</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -763,7 +668,7 @@ export default function OrdersPage() {
                     <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                   </td>
                 </tr>
-              ) : filteredOrders.length === 0 ? (
+              ) : groupedOrders.length === 0 ? (
                 <tr>
                   <td colSpan="38" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -776,278 +681,105 @@ export default function OrdersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order, idx) => (
-                  <tr key={order.doNumber || idx} className="hover:bg-slate-50/80 transition-colors">
-                    {/* Sticky Actions */}
-                    <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
-                      <div className="flex items-center justify-center gap-1">
+                groupedOrders.map((group) => {
+                  const orderRows = group.orders;
+                  const order = orderRows[0]; // shared PO/party/commercial fields
+                  const isGroup = orderRows.length > 1;
+
+                  // Aggregate product-specific values across the group
+                  const doNumbers = orderRows.map((o) => o.doNumber).filter(Boolean).join(', ');
+                  const productNames = orderRows.map((o) => o.productName).filter(Boolean);
+                  const sameMeasurement = orderRows.every((o) => o.typeOfMeasurement === order.typeOfMeasurement);
+                  const totalQuantity = orderRows.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
+                  const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+
+                  return (
+                    <tr key={group.key} className="hover:bg-slate-50/80 transition-colors">
+                      {/* Sticky Actions — view only; edits happen directly in the Google Sheet */}
+                      <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
                         <button
                           type="button"
-                          onClick={() => handleOpenView(order)}
-                          title="View Full Details"
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          onClick={() => handleOpenView(orderRows)}
+                          title={isGroup ? `View all ${orderRows.length} products` : 'View Full Details'}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative"
                         >
                           <Eye className="w-4 h-4" />
+                          {isGroup && (
+                            <span className="absolute -top-1 -right-1 flex items-center justify-center w-3.5 h-3.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full">
+                              {orderRows.length}
+                            </span>
+                          )}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(order)}
-                          title="Edit Order"
-                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDelete(order)}
-                          title="Delete Order"
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 0. Timestamp */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-500 text-[11px] font-mono">
-                      {api.formatDate(order.timestamp) || '—'}
-                    </td>
+                      {/* 0. Timestamp */}
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-500 text-[11px] font-mono">
+                        {api.formatDate(order.timestamp) || '—'}
+                      </td>
 
-                    {/* 1. DO-Delivery Order No. */}
-                    <td className="px-3.5 py-3 font-mono font-bold text-indigo-600 whitespace-nowrap">
-                      {order.doNumber || '—'}
-                    </td>
+                      {/* 1. DO-Delivery Order No. */}
+                      <td className="px-3.5 py-3 font-mono font-bold text-indigo-600 whitespace-nowrap" title={isGroup ? doNumbers : undefined}>
+                        {isGroup ? `${order.doNumber} +${orderRows.length - 1}` : (order.doNumber || '—')}
+                      </td>
 
-                    {/* 2. PARTY PO NO (As Per Po Exact) */}
-                    <td className="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap">
-                      {order.partyPoNo || '—'}
-                    </td>
+                      {/* 2. PARTY PO NO (As Per Po Exact) */}
+                      <td className="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap">
+                        {order.partyPoNo || '—'}
+                      </td>
 
-                    {/* 3. Party PO Date */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
-                      {api.formatDate(order.partyPoDate) || '—'}
-                    </td>
+                      {/* 3. Party PO Date */}
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
+                        {api.formatDate(order.partyPoDate) || '—'}
+                      </td>
 
-                    {/* 4. Party Names */}
-                    <td className="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap">
-                      {order.partyNames || '—'}
-                    </td>
+                      {/* 4. Party Names */}
+                      <td className="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap">
+                        {order.partyNames || '—'}
+                      </td>
 
-                    {/* 5. Product Name */}
-                    <td className="px-3.5 py-3 text-slate-800 whitespace-nowrap">
-                      {order.productName || '—'}
-                    </td>
+                      {/* 5. Product Name */}
+                      <td className="px-3.5 py-3 text-slate-800 whitespace-nowrap" title={isGroup ? productNames.join(', ') : undefined}>
+                        {isGroup ? `${orderRows.length} products` : (order.productName || '—')}
+                      </td>
 
-                    {/* 6. Quantity */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.quantity ? Number(order.quantity).toLocaleString('en-IN') : '—'}
-                    </td>
+                      {/* 6. Quantity */}
+                      <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
+                        {totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${isGroup && sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}
+                      </td>
 
-                    {/* 7. Rate Of Material */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.rateOfMaterial ? `₹${Number(order.rateOfMaterial).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 8. Type Of Transporting */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.typeOfTransporting || '—'}
-                    </td>
-
-                    {/* 9. Upload SO */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.uploadSo ? (
-                        order.uploadSo.startsWith('http') ? (
-                          <a
-                            href={order.uploadSo}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
-                          >
-                            <span>Open SO</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span>{order.uploadSo}</span>
-                        )
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-
-                    {/* 10. Is This Order Through Some Agent */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${order.isThroughAgent === 'Yes' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-50 text-slate-600'}`}>
-                        {order.isThroughAgent || 'No'}
-                      </span>
-                    </td>
-
-                    {/* 11. Order Received From */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.orderReceivedFrom || '—'}
-                    </td>
-
-                    {/* 12. Type Of Measurement */}
-                    <td className="px-3.5 py-3 whitespace-nowrap font-medium text-slate-700">
-                      {order.typeOfMeasurement || '—'}
-                    </td>
-
-                    {/* 13. Contact Person Name */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.contactPersonName || '—'}
-                    </td>
-
-                    {/* 14. Contact Person WhatsApp No. */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700 font-mono">
-                      {order.contactPersonWhatsapp || '—'}
-                    </td>
-
-                    {/* 15. Alumina% */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.aluminaPct || '—'}
-                    </td>
-
-                    {/* 16. Iron% */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.ironPct || '—'}
-                    </td>
-
-                    {/* 17. Type Of PI */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.typeOfPi || '—'}
-                    </td>
-
-                    {/* 18. Lead Time For Collection Of Final Payment */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.leadTimeFinalPayment || '—'}
-                    </td>
-
-                    {/* 19. Type Of Application */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.typeOfApplication || '—'}
-                    </td>
-
-                    {/* 20. Customer Category */}
-                    <td className="px-3.5 py-3 whitespace-nowrap">
-                      {order.customerCategory ? (
-                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          {order.customerCategory}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-
-                    {/* 21. Free Replacement (FOC) */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-center text-slate-700">
-                      {order.freeReplacementFoc || 'No'}
-                    </td>
-
-                    {/* 22. Gst Number */}
-                    <td className="px-3.5 py-3 whitespace-nowrap font-mono text-slate-700">
-                      {order.gstNumber || '—'}
-                    </td>
-
-                    {/* 23. Address */}
-                    <td className="px-3.5 py-3 whitespace-nowrap max-w-xs truncate text-slate-700" title={order.address}>
-                      {order.address || '—'}
-                    </td>
-
-                    {/* 24. Firm Name */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.firmName || '—'}
-                    </td>
-
-                    {/* 25. Total PO Basic Value */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.totalPoBasicValue ? `₹${Number(order.totalPoBasicValue).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 26. Payment to Be Taken */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.paymentToBeTaken || '—'}
-                    </td>
-
-                    {/* 27. Advance */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.advance ? `₹${Number(order.advance).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 28. Basic */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.basic ? `₹${Number(order.basic).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 29. Retention Payment */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-center text-slate-700">
-                      {order.retentionPayment || 'No'}
-                    </td>
-
-                    {/* 30. Retention Percentage */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.retentionPercentage || '—'}
-                    </td>
-
-                    {/* 31. Lead Time for Retention */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.leadTimeRetention || '—'}
-                    </td>
-
-                    {/* 32. Specific Concern */}
-                    <td className="px-3.5 py-3 whitespace-nowrap max-w-xs truncate text-slate-700" title={order.specificConcern}>
-                      {order.specificConcern || '—'}
-                    </td>
-
-                    {/* 33. Reference No. */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
-                      {order.referenceNo || '—'}
-                    </td>
-
-                    {/* 34. Adjusted Amount */}
-                    <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                      {order.adjustedAmount ? `₹${Number(order.adjustedAmount).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 35. Total PO Value */}
-                    <td className="px-3.5 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
-                      {order.totalPoValue ? `₹${Number(order.totalPoValue).toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    {/* 36. Marketing Sales Person */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-slate-800 font-medium">
-                      {order.salesPersonName || '—'}
-                    </td>
-
-                    {/* 37. TC Required */}
-                    <td className="px-3.5 py-3 whitespace-nowrap text-center text-slate-700">
-                      {order.tcRequired || '—'}
-                    </td>
-                  </tr>
-                ))
+                      {/* Total PO Value */}
+                      <td className="px-3.5 py-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                        {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
         <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>Showing {filteredOrders.length} of {orders.length} orders</span>
+          <span>
+            Showing {groupedOrders.length} order{groupedOrders.length === 1 ? '' : 's'}
+            {filteredOrders.length !== groupedOrders.length ? ` (${filteredOrders.length} product line items)` : ''}
+          </span>
           <span>Google Sheet: <strong>FMS</strong> Tab (37 Columns starting from Row 7)</span>
         </div>
       </div>
 
       {/* =========================================================================
-          ADD / EDIT ORDER MODAL (37 Fields organized in 5 logical tabs)
+          ADD ORDER MODAL (37 Fields organized in 5 logical tabs)
+          Add-only — existing rows are changed directly in the Google Sheet.
       ========================================================================= */}
-      {(isAddModalOpen || isEditModalOpen) && (
+      {isAddModalOpen && (
         <Modal
-          isOpen={isAddModalOpen || isEditModalOpen}
-          onClose={() => {
-            setIsAddModalOpen(false);
-            setIsEditModalOpen(false);
-          }}
-          title={isAddModalOpen ? 'Order Receipt Form' : `Edit Delivery Order: ${formData.doNumber}`}
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          title="Order Receipt Form"
           maxWidth="max-w-4xl"
         >
-          <form onSubmit={isAddModalOpen ? handleAddSubmit : handleEditSubmit} className="space-y-6">
+          <form onSubmit={handleAddSubmit} className="space-y-6">
             {/* SECTION 1: PO & GENERAL INFO */}
             <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-200 space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 pb-2 border-b border-slate-200 flex items-center gap-2">
@@ -1236,21 +968,18 @@ export default function OrdersPage() {
                   <Layers className="w-4 h-4 text-indigo-600" />
                   <span>3. Product & Technical Specifications</span>
                 </h4>
-                {isAddModalOpen && (
-                  <button
-                    type="button"
-                    onClick={handleAddProductRow}
-                    disabled={products.length >= 20}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-indigo-700 hover:bg-indigo-50 shadow-2xs disabled:opacity-50"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Product
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleAddProductRow}
+                  disabled={products.length >= 20}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-indigo-700 hover:bg-indigo-50 shadow-2xs disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Product
+                </button>
               </div>
 
-              {isAddModalOpen ? (
-                <div className="space-y-4">
+              <div className="space-y-4">
                   {products.map((p, idx) => (
                     <div
                       key={idx}
@@ -1405,138 +1134,6 @@ export default function OrdersPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <SearchableSelect
-                      label="Product Name"
-                      required
-                      options={productOptions}
-                      value={formData.productName}
-                      onChange={(val) => setFormData({ ...formData, productName: val })}
-                      placeholder="Select or search Product Name..."
-                      searchPlaceholder="Type to search product..."
-                      allowCustom={true}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Quantity *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      required
-                      value={formData.quantity}
-                      onChange={(e) => handleQtyRateChange('quantity', e.target.value)}
-                      placeholder="1200"
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                    />
-                  </div>
-
-                  <div>
-                    <SearchableSelect
-                      label="Type Of Measurement"
-                      required
-                      options={measurementOptions}
-                      value={formData.typeOfMeasurement}
-                      onChange={(val) => setFormData({ ...formData, typeOfMeasurement: val })}
-                      placeholder="Select measurement unit..."
-                      searchPlaceholder="Type to search unit..."
-                      allowCustom={true}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Rate Of Material (₹) *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      required
-                      value={formData.rateOfMaterial}
-                      onChange={(e) => handleQtyRateChange('rateOfMaterial', e.target.value)}
-                      placeholder="300"
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Total PO Basic Value (Auto: Qty × Rate)
-                    </label>
-                    <input
-                      type="number"
-                      readOnly
-                      value={formData.totalPoBasicValue}
-                      className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Alumina%
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.aluminaPct}
-                      onChange={(e) => setFormData({ ...formData, aluminaPct: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Iron%
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.ironPct}
-                      onChange={(e) => setFormData({ ...formData, ironPct: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                      Type Of Application
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.typeOfApplication}
-                      onChange={(e) => setFormData({ ...formData, typeOfApplication: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <SearchableSelect
-                        label="TC Required"
-                        options={tcRequiredOptions}
-                        value={formData.tcRequired}
-                        onChange={(val) => setFormData({ ...formData, tcRequired: val })}
-                        placeholder="Select..."
-                        searchPlaceholder="Search..."
-                        allowCustom={false}
-                      />
-                    </div>
-                    <div>
-                      <SearchableSelect
-                        label="Free Replacement (FOC)"
-                        options={freeReplacementOptions}
-                        value={formData.freeReplacementFoc}
-                        onChange={(val) => setFormData({ ...formData, freeReplacementFoc: val })}
-                        placeholder="Select..."
-                        searchPlaceholder="Search..."
-                        allowCustom={false}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* SECTION 4: COMMERCIAL & PAYMENT TERMS */}
@@ -1722,10 +1319,7 @@ export default function OrdersPage() {
             <div className="sticky bottom-0 bg-white/95 backdrop-blur-xs pt-4 pb-1 border-t border-slate-200 flex items-center justify-end gap-3 z-10">
               <button
                 type="button"
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setIsEditModalOpen(false);
-                }}
+                onClick={() => setIsAddModalOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 Cancel
@@ -1735,7 +1329,7 @@ export default function OrdersPage() {
                 disabled={submitting}
                 className="px-6 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm shadow-indigo-200 disabled:opacity-50 transition-colors"
               >
-                {submitting ? 'Saving...' : isAddModalOpen ? 'Save Order to Sheet' : 'Update Order in Sheet'}
+                {submitting ? 'Saving...' : 'Save Order to Sheet'}
               </button>
             </div>
           </form>
@@ -1748,161 +1342,134 @@ export default function OrdersPage() {
       <Modal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
-        title={`Delivery Order Details: ${selectedOrder?.doNumber}`}
+        title={`Delivery Order Details: ${viewGroup[0]?.doNumber}${viewGroup.length > 1 ? ` + ${viewGroup.length - 1} more` : ''}`}
         maxWidth="max-w-4xl"
       >
-        {selectedOrder && (
-          <div className="space-y-6 text-sm text-slate-700">
-            {/* Section 1 */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
-                1. Order & PO Identification
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400">DO Number:</span> <strong className="font-mono text-indigo-600 block text-sm">{selectedOrder.doNumber}</strong></div>
-                <div><span className="text-slate-400">Party PO No:</span> <strong className="text-slate-800 block text-sm">{selectedOrder.partyPoNo || '—'}</strong></div>
-                <div><span className="text-slate-400">Party PO Date:</span> <strong className="text-slate-800 block">{api.formatDate(selectedOrder.partyPoDate) || '—'}</strong></div>
-                <div><span className="text-slate-400">Reference No:</span> <strong className="text-slate-800 block">{selectedOrder.referenceNo || '—'}</strong></div>
-                <div><span className="text-slate-400">Firm Name:</span> <strong className="text-slate-800 block">{selectedOrder.firmName || '—'}</strong></div>
-                <div><span className="text-slate-400">Sales Person:</span> <strong className="text-slate-800 block">{selectedOrder.salesPersonName || '—'}</strong></div>
-              </div>
-            </div>
+        {viewGroup.length > 0 && (() => {
+          const primary = viewGroup[0];
+          const isGroup = viewGroup.length > 1;
+          const totalPoValueSum = viewGroup.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+          const basicSum = viewGroup.reduce((sum, o) => sum + (Number(o.basic) || 0), 0);
 
-            {/* Section 2 */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
-                2. Customer / Party Information
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div className="sm:col-span-2"><span className="text-slate-400">Party Name:</span> <strong className="text-slate-800 block text-sm">{selectedOrder.partyNames}</strong></div>
-                <div><span className="text-slate-400">Category:</span> <strong className="text-slate-800 block">{selectedOrder.customerCategory || '—'}</strong></div>
-                <div><span className="text-slate-400">Contact Person:</span> <strong className="text-slate-800 block">{selectedOrder.contactPersonName || '—'}</strong></div>
-                <div><span className="text-slate-400">WhatsApp No:</span> <strong className="text-slate-800 block">{selectedOrder.contactPersonWhatsapp || '—'}</strong></div>
-                <div><span className="text-slate-400">GST Number:</span> <strong className="text-slate-800 font-mono block">{selectedOrder.gstNumber || '—'}</strong></div>
-                <div><span className="text-slate-400">Order Received From:</span> <strong className="text-slate-800 block">{selectedOrder.orderReceivedFrom || '—'}</strong></div>
-                <div><span className="text-slate-400">Through Agent:</span> <strong className="text-slate-800 block">{selectedOrder.isThroughAgent || 'No'}</strong></div>
-                <div className="sm:col-span-3"><span className="text-slate-400">Delivery Address:</span> <span className="text-slate-800 block">{selectedOrder.address || '—'}</span></div>
-              </div>
-            </div>
-
-            {/* Section 3 */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
-                3. Product & Specifications
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="sm:col-span-2"><span className="text-slate-400">Product:</span> <strong className="text-slate-800 block text-sm">{selectedOrder.productName}</strong></div>
-                <div><span className="text-slate-400">Quantity:</span> <strong className="text-slate-800 block">{selectedOrder.quantity} {selectedOrder.typeOfMeasurement || 'MT'}</strong></div>
-                <div><span className="text-slate-400">Rate of Material:</span> <strong className="text-slate-800 block">₹{selectedOrder.rateOfMaterial}</strong></div>
-                <div><span className="text-slate-400">Alumina%:</span> <strong className="text-slate-800 block">{selectedOrder.aluminaPct || '—'}</strong></div>
-                <div><span className="text-slate-400">Iron%:</span> <strong className="text-slate-800 block">{selectedOrder.ironPct || '—'}</strong></div>
-                <div><span className="text-slate-400">Application:</span> <strong className="text-slate-800 block">{selectedOrder.typeOfApplication || '—'}</strong></div>
-                <div><span className="text-slate-400">TC Required:</span> <strong className="text-slate-800 block">{selectedOrder.tcRequired || 'No'}</strong></div>
-                <div><span className="text-slate-400">Free Replacement (FOC):</span> <strong className="text-slate-800 block">{selectedOrder.freeReplacementFoc || 'No'}</strong></div>
-                <div><span className="text-slate-400">Total PO Basic Value:</span> <strong className="text-slate-800 block">₹{Number(selectedOrder.totalPoBasicValue || 0).toLocaleString('en-IN')}</strong></div>
-              </div>
-            </div>
-
-            {/* Section 4 */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
-                4. Commercial & Payment Terms
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400">Total PO Value:</span> <strong className="text-indigo-900 block text-base font-bold">₹{Number(selectedOrder.totalPoValue || 0).toLocaleString('en-IN')}</strong></div>
-                <div><span className="text-slate-400">Type Of PI:</span> <strong className="text-slate-800 block">{selectedOrder.typeOfPi || '—'}</strong></div>
-                <div><span className="text-slate-400">Payment to Be Taken:</span> <strong className="text-slate-800 block">{selectedOrder.paymentToBeTaken || '—'}</strong></div>
-                <div><span className="text-slate-400">Advance:</span> <strong className="text-emerald-700 block">₹{Number(selectedOrder.advance || 0).toLocaleString('en-IN')}</strong></div>
-                <div><span className="text-slate-400">Basic:</span> <strong className="text-slate-800 block">₹{Number(selectedOrder.basic || 0).toLocaleString('en-IN')}</strong></div>
-                <div><span className="text-slate-400">Adjusted Amount:</span> <strong className="text-slate-800 block">₹{Number(selectedOrder.adjustedAmount || 0).toLocaleString('en-IN')}</strong></div>
-                <div><span className="text-slate-400">Lead Time for Final Payment:</span> <strong className="text-slate-800 block">{selectedOrder.leadTimeFinalPayment || '—'}</strong></div>
-                <div><span className="text-slate-400">Retention:</span> <strong className="text-slate-800 block">{selectedOrder.retentionPayment || 'No'} ({selectedOrder.retentionPercentage || '0%'})</strong></div>
-                <div><span className="text-slate-400">Lead Time for Retention:</span> <strong className="text-slate-800 block">{selectedOrder.leadTimeRetention || '—'}</strong></div>
-              </div>
-            </div>
-
-            {/* Section 5 */}
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
-                5. Logistics & Special Notes
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div><span className="text-slate-400">Transporting:</span> <strong className="text-slate-800 block">{selectedOrder.typeOfTransporting || '—'}</strong></div>
-                <div>
-                  <span className="text-slate-400">SO Document:</span> 
-                  {selectedOrder.uploadSo ? (
-                    <a href={selectedOrder.uploadSo} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline flex items-center gap-1 mt-0.5">
-                      <span>View Attached SO</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : (
-                    <span className="text-slate-400 block">No SO uploaded</span>
-                  )}
+          return (
+            <div className="space-y-6 text-sm text-slate-700">
+              {/* Section 1 */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
+                  1. Order & PO Identification
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div><span className="text-slate-400">DO Number{isGroup ? 's' : ''}:</span> <strong className="font-mono text-indigo-600 block text-sm">{viewGroup.map((o) => o.doNumber).join(', ')}</strong></div>
+                  <div><span className="text-slate-400">Party PO No:</span> <strong className="text-slate-800 block text-sm">{primary.partyPoNo || '—'}</strong></div>
+                  <div><span className="text-slate-400">Party PO Date:</span> <strong className="text-slate-800 block">{api.formatDate(primary.partyPoDate) || '—'}</strong></div>
+                  <div><span className="text-slate-400">Reference No:</span> <strong className="text-slate-800 block">{primary.referenceNo || '—'}</strong></div>
+                  <div><span className="text-slate-400">Firm Name:</span> <strong className="text-slate-800 block">{primary.firmName || '—'}</strong></div>
+                  <div><span className="text-slate-400">Sales Person:</span> <strong className="text-slate-800 block">{primary.salesPersonName || '—'}</strong></div>
                 </div>
-                <div className="sm:col-span-2"><span className="text-slate-400">Specific Concern:</span> <p className="text-slate-700 bg-slate-50 p-2 rounded mt-0.5">{selectedOrder.specificConcern || 'None'}</p></div>
+              </div>
+
+              {/* Section 2 */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
+                  2. Customer / Party Information
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="sm:col-span-2"><span className="text-slate-400">Party Name:</span> <strong className="text-slate-800 block text-sm">{primary.partyNames}</strong></div>
+                  <div><span className="text-slate-400">Category:</span> <strong className="text-slate-800 block">{primary.customerCategory || '—'}</strong></div>
+                  <div><span className="text-slate-400">Contact Person:</span> <strong className="text-slate-800 block">{primary.contactPersonName || '—'}</strong></div>
+                  <div><span className="text-slate-400">WhatsApp No:</span> <strong className="text-slate-800 block">{primary.contactPersonWhatsapp || '—'}</strong></div>
+                  <div><span className="text-slate-400">GST Number:</span> <strong className="text-slate-800 font-mono block">{primary.gstNumber || '—'}</strong></div>
+                  <div><span className="text-slate-400">Order Received From:</span> <strong className="text-slate-800 block">{primary.orderReceivedFrom || '—'}</strong></div>
+                  <div><span className="text-slate-400">Through Agent:</span> <strong className="text-slate-800 block">{primary.isThroughAgent || 'No'}</strong></div>
+                  <div className="sm:col-span-3"><span className="text-slate-400">Delivery Address:</span> <span className="text-slate-800 block">{primary.address || '—'}</span></div>
+                </div>
+              </div>
+
+              {/* Section 3 */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
+                  3. Product{isGroup ? `s (${viewGroup.length})` : ''} & Specifications
+                </h4>
+                <div className="space-y-2.5">
+                  {viewGroup.map((p, idx) => (
+                    <div key={p.rowIndex ?? idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                      {isGroup && (
+                        <div className="mb-2">
+                          <span className="font-mono font-bold text-indigo-600 text-xs">{p.doNumber}</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="sm:col-span-2"><span className="text-slate-400">Product:</span> <strong className="text-slate-800 block text-sm">{p.productName}</strong></div>
+                        <div><span className="text-slate-400">Quantity:</span> <strong className="text-slate-800 block">{p.quantity} {p.typeOfMeasurement || 'MT'}</strong></div>
+                        <div><span className="text-slate-400">Rate of Material:</span> <strong className="text-slate-800 block">₹{p.rateOfMaterial}</strong></div>
+                        <div><span className="text-slate-400">Alumina%:</span> <strong className="text-slate-800 block">{p.aluminaPct || '—'}</strong></div>
+                        <div><span className="text-slate-400">Iron%:</span> <strong className="text-slate-800 block">{p.ironPct || '—'}</strong></div>
+                        <div><span className="text-slate-400">Application:</span> <strong className="text-slate-800 block">{p.typeOfApplication || '—'}</strong></div>
+                        <div><span className="text-slate-400">Basic Value:</span> <strong className="text-slate-800 block">₹{Number(p.totalPoBasicValue || 0).toLocaleString('en-IN')}</strong></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs mt-3">
+                  <div><span className="text-slate-400">TC Required:</span> <strong className="text-slate-800 block">{primary.tcRequired || 'No'}</strong></div>
+                  <div><span className="text-slate-400">Free Replacement (FOC):</span> <strong className="text-slate-800 block">{primary.freeReplacementFoc || 'No'}</strong></div>
+                </div>
+              </div>
+
+              {/* Section 4 */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
+                  4. Commercial & Payment Terms
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                  <div><span className="text-slate-400">Total PO Value{isGroup ? ' (All Products)' : ''}:</span> <strong className="text-indigo-900 block text-base font-bold">₹{totalPoValueSum.toLocaleString('en-IN')}</strong></div>
+                  <div><span className="text-slate-400">Type Of PI:</span> <strong className="text-slate-800 block">{primary.typeOfPi || '—'}</strong></div>
+                  <div><span className="text-slate-400">Payment to Be Taken:</span> <strong className="text-slate-800 block">{primary.paymentToBeTaken || '—'}</strong></div>
+                  <div><span className="text-slate-400">Advance:</span> <strong className="text-emerald-700 block">₹{Number(primary.advance || 0).toLocaleString('en-IN')}</strong></div>
+                  <div><span className="text-slate-400">Basic{isGroup ? ' (Sum)' : ''}:</span> <strong className="text-slate-800 block">₹{basicSum.toLocaleString('en-IN')}</strong></div>
+                  <div><span className="text-slate-400">Adjusted Amount:</span> <strong className="text-slate-800 block">₹{Number(primary.adjustedAmount || 0).toLocaleString('en-IN')}</strong></div>
+                  <div><span className="text-slate-400">Lead Time for Final Payment:</span> <strong className="text-slate-800 block">{primary.leadTimeFinalPayment || '—'}</strong></div>
+                  <div><span className="text-slate-400">Retention:</span> <strong className="text-slate-800 block">{primary.retentionPayment || 'No'} ({primary.retentionPercentage || '0%'})</strong></div>
+                  <div><span className="text-slate-400">Lead Time for Retention:</span> <strong className="text-slate-800 block">{primary.leadTimeRetention || '—'}</strong></div>
+                </div>
+              </div>
+
+              {/* Section 5 */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg mb-3">
+                  5. Logistics & Special Notes
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div><span className="text-slate-400">Transporting:</span> <strong className="text-slate-800 block">{primary.typeOfTransporting || '—'}</strong></div>
+                  <div>
+                    <span className="text-slate-400">SO Document:</span>
+                    {primary.uploadSo ? (
+                      <a href={primary.uploadSo} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline flex items-center gap-1 mt-0.5">
+                        <span>View Attached SO</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-slate-400 block">No SO uploaded</span>
+                    )}
+                  </div>
+                  <div className="sm:col-span-2"><span className="text-slate-400">Specific Concern:</span> <p className="text-slate-700 bg-slate-50 p-2 rounded mt-0.5">{primary.specificConcern || 'None'}</p></div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsViewModalOpen(false)}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
               </div>
             </div>
-
-            <div className="flex justify-end pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsViewModalOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
-      {/* =========================================================================
-          DELETE CONFIRMATION MODAL
-      ========================================================================= */}
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title="Delete Delivery Order"
-        maxWidth="max-w-md"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 text-rose-600">
-            <div className="p-2.5 rounded-full bg-rose-50">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-semibold text-slate-800">Are you sure?</h4>
-              <p className="text-xs text-slate-500">
-                This action will delete delivery order <strong className="font-mono text-rose-600">{selectedOrder?.doNumber}</strong> from Google Sheets.
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1 text-slate-600">
-            <p><strong>Party:</strong> {selectedOrder?.partyNames}</p>
-            <p><strong>Product:</strong> {selectedOrder?.productName}</p>
-            <p><strong>Total Value:</strong> ₹{Number(selectedOrder?.totalPoValue || 0).toLocaleString('en-IN')}</p>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={handleDeleteConfirm}
-              className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm disabled:opacity-50 transition-colors"
-            >
-              {submitting ? 'Deleting...' : 'Yes, Delete Order'}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
