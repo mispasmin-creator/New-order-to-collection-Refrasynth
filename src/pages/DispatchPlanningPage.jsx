@@ -551,7 +551,6 @@ export default function DispatchPlanningPage() {
                       <th className="px-3 py-2.5">Product</th>
                       <th className="px-3 py-2.5 text-right">Product Order Qty</th>
                       <th className="px-3 py-2.5 text-right">Dispatched Quantity</th>
-                      <th className="px-3 py-2.5 text-right">Allocated Qty</th>
                       <th className="px-3 py-2.5 text-right">Pending</th>
                       <th className="px-3 py-2.5">Dispatch <span className="text-rose-500">*</span></th>
                       <th className="px-3 py-2.5"></th>
@@ -560,7 +559,7 @@ export default function DispatchPlanningPage() {
                   <tbody className="divide-y divide-slate-100">
                     {includedRows.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="px-3 py-6 text-center text-slate-400">
+                        <td colSpan="7" className="px-3 py-6 text-center text-slate-400">
                           No products left in this plan — Cancel and reopen to reset.
                         </td>
                       </tr>
@@ -578,7 +577,6 @@ export default function DispatchPlanningPage() {
                             <td className="px-3 py-2.5 font-semibold text-slate-800">{o.productName || '—'}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{fmtQty(orderQty)}</td>
                             <td className="px-3 py-2.5 text-right text-slate-700">{fmtQty(dispatchedQty)}</td>
-                            <td className="px-3 py-2.5 text-right text-slate-700">{fmtQty(allocatedQty)}</td>
                             <td className="px-3 py-2.5 text-right font-semibold text-amber-600">{fmtQty(pendingQty)}</td>
                             <td className="px-3 py-2.5">
                               <input
