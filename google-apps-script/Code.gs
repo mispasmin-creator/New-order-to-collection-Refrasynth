@@ -162,12 +162,14 @@ function doPost(e) {
             for (var r = 1; r <= searchLimit; r++) {
                 var rowVals = sheet.getRange(r, 1, 1, sheet.getLastColumn()).getValues()[0];
                 var rowStr = rowVals.join('||').toUpperCase();
-                // Look for at least 2 known FMS headers in the same row
+                // Look for at least 1 known header marker in the same row. This must stay
+                // sheet-agnostic (FMS, Dispatch, Billing, Full Kitting, ...) — every one of
+                // them has a Timestamp column, so that alone is a reliable signal.
                 var hits = 0;
                 if (rowStr.indexOf('DO-DELIVERY') !== -1 || rowStr.indexOf('PARTY PO') !== -1) hits++;
                 if (rowStr.indexOf('PARTY NAMES') !== -1 || rowStr.indexOf('PRODUCT NAME') !== -1) hits++;
                 if (rowStr.indexOf('TIMESTAMP') !== -1) hits++;
-                if (hits >= 2) {
+                if (hits >= 1) {
                     headerRow = r;
                     headerValues = rowVals;
                     break;
@@ -175,7 +177,7 @@ function doPost(e) {
             }
 
             if (headerRow === -1) {
-                throw new Error("FMS header row not found in first 6 rows");
+                throw new Error("Header row not found in first 6 rows for sheet '" + sheetName + "'");
             }
 
             // ── Build column-index map { "Header Name (lowercase)": colIndex (1-based) }
