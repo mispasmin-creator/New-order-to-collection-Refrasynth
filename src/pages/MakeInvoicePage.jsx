@@ -115,6 +115,7 @@ export default function MakeInvoicePage() {
           rateOfMaterial: order?.rateOfMaterial || '',
           partyPoNo: order?.partyPoNo || '',
           partyPoDate: order?.partyPoDate || '',
+          partyPoCopy: order?.uploadSo || e.partyPoCopy || '',
           partyNames: order?.partyNames || e.partyName || '',
         };
       });
@@ -318,10 +319,21 @@ export default function MakeInvoicePage() {
                 </th>
                 <th className="px-3.5 py-3 whitespace-nowrap">DO-Delivery Order No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">PARTY PO NO</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">PO Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Party Names</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Transporter Name</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Truck No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Vehicle No. Plate Image</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Actual Truck Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Type Of Rate</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Transport Rate @Per Matric Ton</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Fixed Amount</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Load Iamge 1</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Weighment Iamge 1</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned 3</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bill No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Invoice Status</th>
               </tr>
@@ -329,7 +341,7 @@ export default function MakeInvoicePage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center text-slate-400">
+                  <td colSpan="19" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading weighed shipments from Google Sheets...
@@ -338,7 +350,7 @@ export default function MakeInvoicePage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-slate-400">
+                  <td colSpan="19" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -399,6 +411,11 @@ export default function MakeInvoicePage() {
                       <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
                         {primary.partyPoNo || '—'}
                       </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {primary.partyPoCopy ? (
+                          <a href={primary.partyPoCopy} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
+                      </td>
                       <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
                         {primary.partyNames || '—'}
                       </td>
@@ -416,6 +433,42 @@ export default function MakeInvoicePage() {
                             </span>
                           ))}
                         </div>
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.transporterName || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.truckNo || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {primary.vehiclePlateImage ? (
+                          <a href={primary.vehiclePlateImage} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
+                        {primary.actualTruckQty || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.typeOfRate || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
+                        {primary.transportRatePerMt || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
+                        {primary.fixedAmount || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {primary.loadImage1 ? (
+                          <a href={primary.loadImage1} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {primary.weighmentImage1 ? (
+                          <a href={primary.weighmentImage1} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {api.formatDate(primary.invoicePlanned) || '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {billNos.join(', ') || '—'}
