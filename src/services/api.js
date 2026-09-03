@@ -1066,6 +1066,88 @@ export const api = {
     return { success: true, data: [], maxLgstSeq: 0 };
   },
 
+  // Full Kitting ("Status: Yes") submissions are written to the real 'Full Kitting'
+  // sheet tab, one row per product, carrying forward the transporter details already
+  // captured during Arrange Logistics plus the newly-entered Transport Amount.
+  async getFullKittingEntries() {
+    if (!FORCE_MOCK) {
+      try {
+        const res = await sendToAppsScript({
+          action: 'read',
+          sheet: 'Full Kitting',
+        });
+        if (res && res.success && Array.isArray(res.data)) {
+          let headerRowIdx = 5;
+          const colMap = {};
+          for (let r = 0; r < Math.min(res.data.length, 7); r++) {
+            const rowArr = res.data[r] || [];
+            const rowStr = JSON.stringify(rowArr).toUpperCase();
+            if (rowStr.includes('DELIVERY ORDER') || rowStr.includes('LGST-SR NUMBER') || rowStr.includes('TRANSPORT AMOUNT')) {
+              headerRowIdx = r;
+              rowArr.forEach((cell, cIdx) => {
+                const cleanHdr = (cell || '').toString().trim().toLowerCase();
+                if (cleanHdr) {
+                  colMap[cleanHdr] = cIdx;
+                }
+              });
+              break;
+            }
+          }
+
+          const entries = [];
+          for (let i = headerRowIdx + 1; i < res.data.length; i++) {
+            const row = res.data[i];
+            if (!row || row.length === 0 || !row.some((c) => c !== null && c !== '')) continue;
+            const lgstNo = (row[colMap['lgst-sr number']] ?? '').toString().trim();
+            const doNo = (row[colMap['delivery order no']] ?? '').toString().trim();
+            if (!doNo && !lgstNo) continue;
+
+            entries.push({
+              rowIndex: i + 1,
+              timestamp: formatAppDate(row[colMap['timestamp']] || ''),
+              doNumber: doNo,
+              lgstNo,
+              partyName: (row[colMap['party name']] ?? '').toString().trim(),
+              typeOfTransporting: (row[colMap['type of transporting']] ?? '').toString().trim(),
+              transporterName: (row[colMap['transporter name']] ?? '').toString().trim(),
+              truckNo: (row[colMap['truck no.']] ?? '').toString().trim(),
+              vehiclePlateImage: (row[colMap['vehicle no. plate image']] ?? '').toString().trim(),
+              driverMobileNo: (row[colMap['driver mobile no.']] ?? '').toString().trim(),
+              biltyNo: (row[colMap['bilty no.']] ?? '').toString().trim(),
+              actualTruckQty: (row[colMap['actual truck qty']] ?? '').toString().trim(),
+              typeOfRate: (row[colMap['type of rate']] ?? '').toString().trim(),
+              transportRatePerMt: (row[colMap['transport rate @per matric ton  ']] ?? row[colMap['transport rate @per matric ton']] ?? '').toString().trim(),
+              fixedAmount: (row[colMap['fixed amount']] ?? '').toString().trim(),
+              transportAmount: (row[colMap['transport amount']] ?? '').toString().trim(),
+            });
+          }
+
+          return { success: true, data: entries };
+        }
+      } catch (err) {
+        console.warn('Error reading Full Kitting entries:', err);
+      }
+    }
+    return { success: true, data: [] };
+  },
+
+  async insertFullKittingRows(rows) {
+    if (!FORCE_MOCK) {
+      for (const rowObj of rows) {
+        const res = await sendToAppsScript({
+          action: 'insert',
+          sheetName: 'Full Kitting',
+          rowDataObj: JSON.stringify(rowObj),
+        });
+        if (!res || !res.success) {
+          return { success: false, error: res?.error || 'Failed to insert row into Full Kitting' };
+        }
+      }
+      return { success: true, message: `Successfully inserted ${rows.length} rows into Full Kitting` };
+    }
+    return { success: true, message: 'Inserted into mock' };
+  },
+
   async insertLogisticsRows(rows) {
     if (!FORCE_MOCK) {
       for (const rowObj of rows) {
@@ -1176,6 +1258,107 @@ export const api = {
       return { success: true, message: `Successfully inserted ${rows.length} rows into Dispatch` };
     }
     return { success: true, message: 'Inserted into mock' };
+  },
+
+  // Order Cancel requests are written to a dedicated 'Order Cancel' sheet tab —
+  // the requester fills Timestamp/Cancel No./DO/Party/Product/Qty/Reason, and
+  // Mgmt Approval later fills Actual + Status (Planned/Time Delay are sheet formulas).
+  async getOrderCancelEntries() {
+    if (!FORCE_MOCK) {
+      try {
+        const res = await sendToAppsScript({
+          action: 'read',
+          sheet: 'Order Cancel',
+        });
+        if (res && res.success && Array.isArray(res.data)) {
+          let headerRowIdx = 5; // Default row 6 (0-indexed 5)
+          const colMap = {};
+          for (let r = 0; r < Math.min(res.data.length, 7); r++) {
+            const rowArr = res.data[r] || [];
+            const rowStr = JSON.stringify(rowArr).toUpperCase();
+            if (rowStr.includes('CANCEL NO') || rowStr.includes('DO-DELIVERY ORDER NO') || rowStr.includes('REASON')) {
+              headerRowIdx = r;
+              rowArr.forEach((cell, cIdx) => {
+                const cleanHdr = (cell || '').toString().trim().toLowerCase();
+                if (cleanHdr) {
+                  colMap[cleanHdr] = cIdx;
+                }
+              });
+              break;
+            }
+          }
+
+          const entries = [];
+          let maxCancelSeq = 0;
+          for (let i = headerRowIdx + 1; i < res.data.length; i++) {
+            const row = res.data[i];
+            if (!row || row.length === 0 || !row.some((c) => c !== null && c !== '')) continue;
+            const cancelNo = (row[colMap['cancel no.']] ?? '').toString().trim();
+            const doNumber = (row[colMap['do-delivery order no.']] ?? '').toString().trim();
+            if (!cancelNo && !doNumber) continue;
+
+            const m = cancelNo.match(/CANC-(\d+)/i);
+            if (m) {
+              const num = parseInt(m[1], 10);
+              if (num > maxCancelSeq) maxCancelSeq = num;
+            }
+
+            entries.push({
+              rowIndex: i + 1,
+              timestamp: formatAppDate(row[colMap['timestamp']] || ''),
+              cancelNo,
+              doNumber,
+              partyNames: (row[colMap['party names']] ?? '').toString().trim(),
+              productName: (row[colMap['product name']] ?? '').toString().trim(),
+              qty: (row[colMap['qty']] ?? '').toString().trim(),
+              reason: (row[colMap['reason']] ?? '').toString().trim(),
+              planned: formatAppDate(row[colMap['planned']] || ''),
+              actual: formatAppDate(row[colMap['actual']] || ''),
+              timeDelay: (row[colMap['time delay']] ?? '').toString().trim(),
+              status: (row[colMap['status']] ?? '').toString().trim(),
+            });
+          }
+
+          return { success: true, data: entries, maxCancelSeq };
+        }
+      } catch (err) {
+        console.warn('Error reading Order Cancel entries:', err);
+      }
+    }
+    return { success: true, data: [], maxCancelSeq: 0 };
+  },
+
+  async insertOrderCancelRows(rows) {
+    if (!FORCE_MOCK) {
+      for (const rowObj of rows) {
+        const res = await sendToAppsScript({
+          action: 'insert',
+          sheetName: 'Order Cancel',
+          rowDataObj: JSON.stringify(rowObj),
+        });
+        if (!res || !res.success) {
+          return { success: false, error: res?.error || 'Failed to insert row into Order Cancel' };
+        }
+      }
+      return { success: true, message: `Successfully inserted ${rows.length} rows into Order Cancel` };
+    }
+    return { success: true, message: 'Inserted into mock' };
+  },
+
+  async updateOrderCancelFields(rowIndex, fieldsObj) {
+    if (!FORCE_MOCK) {
+      const res = await sendToAppsScript({
+        action: 'update',
+        sheetName: 'Order Cancel',
+        rowIndex: rowIndex,
+        rowDataObj: JSON.stringify(fieldsObj),
+      });
+      if (res && res.success) {
+        return { success: true, message: 'Order Cancel sheet updated successfully!' };
+      }
+      return { success: false, error: res?.error || 'Failed to update Order Cancel sheet' };
+    }
+    return { success: true, message: 'Updated in mock' };
   },
 
   formatDate: formatAppDate,

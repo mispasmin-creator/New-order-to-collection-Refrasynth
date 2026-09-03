@@ -18,6 +18,7 @@ import {
   BadgeCheck,
   Inbox,
   PackageCheck,
+  Ban,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -34,6 +35,7 @@ import EntryInBiltyPage from '../pages/EntryInBiltyPage';
 import MakeSendTestCertificatePage from '../pages/MakeSendTestCertificatePage';
 import PartyGetReportPage from '../pages/PartyGetReportPage';
 import FullKittingPage from '../pages/FullKittingPage';
+import OrderCancelPage from '../pages/OrderCancelPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -60,6 +62,7 @@ export const iconMap = {
   BadgeCheck,
   Inbox,
   PackageCheck,
+  Ban,
 };
 
 /**
@@ -197,6 +200,14 @@ export const navConfig = [
     path: '/full-kitting',
     icon: 'PackageCheck',
     component: FullKittingPage,
+    inSidebar: true,
+  },
+  {
+    id: 'order-cancel',
+    label: 'Order Cancel',
+    path: '/order-cancel',
+    icon: 'Ban',
+    component: OrderCancelPage,
     inSidebar: true,
   },
   {
