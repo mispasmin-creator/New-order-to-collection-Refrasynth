@@ -367,7 +367,9 @@ export default function DispatchPlanningPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">PARTY PO NO</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Party Names</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Order Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty To Be Dispatched</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Pending Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Dispatch Status</th>
               </tr>
@@ -375,7 +377,7 @@ export default function DispatchPlanningPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-20 text-center text-slate-400">
+                  <td colSpan="10" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading orders from Google Sheets...
@@ -384,7 +386,7 @@ export default function DispatchPlanningPage() {
                 </tr>
               ) : groupedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-16 text-center text-slate-400">
+                  <td colSpan="10" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No orders in this stage
@@ -408,6 +410,10 @@ export default function DispatchPlanningPage() {
                   const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
                   const dispatchedList = orderRows.flatMap((o) =>
                     dispatchEntries.filter((e) => (e.doNumber || '').trim().toLowerCase() === (o.doNumber || '').trim().toLowerCase())
+                  );
+                  const dispatchedQtySum = orderRows.reduce(
+                    (sum, o) => sum + (dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0),
+                    0
                   );
                   const remainingSum = orderRows.reduce((sum, o) => sum + getRemainingQty(o), 0);
                   const isDone = remainingSum <= 0.0001;
@@ -466,6 +472,12 @@ export default function DispatchPlanningPage() {
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-800">
                         {totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${isGroup && sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
+                        {fmtQty(dispatchedQtySum)}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right font-semibold text-amber-600">
+                        {fmtQty(remainingSum)}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-right font-bold text-emerald-700">
                         {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
