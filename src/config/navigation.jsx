@@ -13,6 +13,7 @@ import {
   Truck,
   Boxes,
   ClipboardList,
+  Scale,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -22,6 +23,7 @@ import CheckForDeliveryPage from '../pages/CheckForDeliveryPage';
 import DispatchPlanningPage from '../pages/DispatchPlanningPage';
 import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
 import LoadMaterialPage from '../pages/LoadMaterialPage';
+import WeighmentEntryPage from '../pages/WeighmentEntryPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -43,6 +45,7 @@ export const iconMap = {
   FileText,
   Settings,
   HelpCircle,
+  Scale,
 };
 
 /**
@@ -124,6 +127,14 @@ export const navConfig = [
     path: '/load-material',
     icon: 'Package',
     component: LoadMaterialPage,
+    inSidebar: true,
+  },
+  {
+    id: 'weighment-entry',
+    label: 'Weighment Entry',
+    path: '/weighment-entry',
+    icon: 'Scale',
+    component: WeighmentEntryPage,
     inSidebar: true,
   },
   {
