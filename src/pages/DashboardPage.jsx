@@ -14,12 +14,29 @@ import {
   Boxes,
   FileText,
   PackageCheck,
+  BarChart3,
+  Trophy,
+  AlertCircle,
+  CalendarDays,
 } from 'lucide-react';
 
 const fmtQty = (n) => {
   const num = Number(n) || 0;
   return Number.isInteger(num) ? num.toLocaleString('en-IN') : num.toFixed(2);
 };
+
+// Parses the app's "dd/MM/yyyy HH:mm:ss" timestamp format into a Date, or null
+const parseTimestamp = (ts) => {
+  if (!ts) return null;
+  const m = String(ts).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+};
+
+const isSameDay = (a, b) =>
+  a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function DashboardPage() {
   const [orders, setOrders]                 = useState([]);
@@ -98,6 +115,71 @@ export default function DashboardPage() {
   const checkPoPendingCount = useMemo(() => orders.filter((o) => !o.status1).length, [orders]);
   const maxPipelineCount = Math.max(1, ...pipeline.map((p) => p.count));
 
+  // Which DO numbers have fully finished the pipeline (Full Kitting done)
+  const kittingDoneDoSet = useMemo(() => {
+    const set = new Set();
+    billingEntries.forEach((e) => {
+      if (e.kittingActual) {
+        const key = (e.doNumber || '').trim().toLowerCase();
+        if (key) set.add(key);
+      }
+    });
+    return set;
+  }, [billingEntries]);
+
+  // Today's Sales — sum of Total PO Value for orders placed today
+  const todaysSales = useMemo(() => {
+    const today = new Date();
+    return orders.reduce((sum, o) => {
+      const d = parseTimestamp(o.timestamp);
+      return isSameDay(d, today) ? sum + (Number(o.totalPoValue) || 0) : sum;
+    }, 0);
+  }, [orders]);
+
+  // 7-day Sales Trend — PO value received each of the last 7 days
+  const salesTrend = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push({ date: d, label: WEEKDAY_LABELS[d.getDay()], dateLabel: `${d.getDate()}/${d.getMonth() + 1}`, value: 0 });
+    }
+    orders.forEach((o) => {
+      const d = parseTimestamp(o.timestamp);
+      if (!d) return;
+      const bucket = days.find((day) => isSameDay(day.date, d));
+      if (bucket) bucket.value += Number(o.totalPoValue) || 0;
+    });
+    return days;
+  }, [orders]);
+  const maxTrendValue = Math.max(1, ...salesTrend.map((d) => d.value));
+
+  // Best / Top Parties — ranked by total PO value across all their orders
+  const topParties = useMemo(() => {
+    const map = {};
+    orders.forEach((o) => {
+      const name = (o.partyNames || '').trim();
+      if (!name) return;
+      if (!map[name]) map[name] = { name, value: 0, orderCount: 0 };
+      map[name].value += Number(o.totalPoValue) || 0;
+      map[name].orderCount += 1;
+    });
+    return Object.values(map).sort((a, b) => b.value - a.value).slice(0, 5);
+  }, [orders]);
+  const maxPartyValue = Math.max(1, ...topParties.map((p) => p.value));
+
+  // Pending Orders — haven't finished Full Kitting yet, oldest first
+  const pendingOrdersList = useMemo(() => {
+    return orders
+      .filter((o) => !kittingDoneDoSet.has((o.doNumber || '').trim().toLowerCase()))
+      .sort((a, b) => new Date(parseTimestamp(a.timestamp) || 0) - new Date(parseTimestamp(b.timestamp) || 0))
+      .slice(0, 5);
+  }, [orders, kittingDoneDoSet]);
+  const pendingOrdersCount = useMemo(
+    () => orders.filter((o) => !kittingDoneDoSet.has((o.doNumber || '').trim().toLowerCase())).length,
+    [orders, kittingDoneDoSet]
+  );
+
   const recentOrders = useMemo(() => {
     return [...orders]
       .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
@@ -146,7 +228,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         <StatCard
           title="Total Orders"
           value={loading ? '...' : totalOrders}
@@ -164,9 +246,17 @@ export default function DashboardPage() {
         />
 
         <StatCard
-          title="Pending Check PO"
-          value={loading ? '...' : checkPoPendingCount}
-          subtitle="Awaiting approval decision"
+          title="Today's Sales"
+          value={loading ? '...' : `₹${todaysSales.toLocaleString('en-IN')}`}
+          subtitle="Total PO Value received today"
+          icon={CalendarDays}
+          iconBg="bg-sky-50 text-sky-600"
+        />
+
+        <StatCard
+          title="Pending Orders"
+          value={loading ? '...' : pendingOrdersCount}
+          subtitle="Not yet through Full Kitting"
           icon={Clock}
           iconBg="bg-amber-50 text-amber-600"
         />
@@ -178,6 +268,130 @@ export default function DashboardPage() {
           icon={PackageCheck}
           iconBg="bg-emerald-50 text-emerald-600"
         />
+      </div>
+
+      {/* Sales Trend + Top Parties + Pending Orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Sales Trend Chart */}
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-indigo-600" />
+              <div>
+                <h3 className="text-base font-semibold text-slate-800">Sales Trend</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Total PO Value received — last 7 days</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-end justify-between gap-2 h-40">
+            {salesTrend.map((day) => {
+              const heightPct = Math.max(4, Math.round((day.value / maxTrendValue) * 100));
+              const isToday = isSameDay(day.date, new Date());
+              return (
+                <div key={day.dateLabel} className="flex-1 flex flex-col items-center justify-end h-full gap-2">
+                  <div
+                    title={`₹${day.value.toLocaleString('en-IN')}`}
+                    className={`w-full max-w-10 rounded-t-md transition-all duration-500 ${
+                      isToday ? 'bg-indigo-600' : 'bg-indigo-200 hover:bg-indigo-300'
+                    }`}
+                    style={{ height: `${heightPct}%` }}
+                  />
+                  <span className={`text-[10px] font-semibold ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>
+                    {day.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Top Parties */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
+          <div className="flex items-center gap-2 mb-5">
+            <Trophy className="w-5 h-5 text-amber-500" />
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Top Parties</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Ranked by total PO value</p>
+            </div>
+          </div>
+
+          {topParties.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-6">No party data yet.</p>
+          ) : (
+            <div className="space-y-3.5">
+              {topParties.map((party, idx) => {
+                const pct = Math.round((party.value / maxPartyValue) * 100);
+                return (
+                  <div key={party.name}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="flex items-center gap-1.5 min-w-0 text-slate-700 font-medium">
+                        <span className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          idx === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        <span className="truncate">{party.name}</span>
+                      </span>
+                      <span className="text-slate-500 shrink-0 ml-2">₹{(party.value / 100000).toFixed(1)}L</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${idx === 0 ? 'bg-amber-500' : 'bg-indigo-400'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Pending Orders */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Pending Orders</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Oldest orders still awaiting Full Kitting</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+            {pendingOrdersCount} pending
+          </span>
+        </div>
+
+        {pendingOrdersList.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-8">
+            {loading ? 'Loading...' : 'No pending orders — everything is through Full Kitting.'}
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {pendingOrdersList.map((order, idx) => {
+              const badge = stageBadge(order);
+              return (
+                <div key={order.rowIndex ?? idx} className="px-6 py-3 flex items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-xs font-semibold text-indigo-600 shrink-0">{order.doNumber || '—'}</span>
+                    <span className="text-sm text-slate-700 truncate">{order.partyNames || '—'}</span>
+                    <span className="text-xs text-slate-400 truncate hidden sm:inline">{order.productName || ''}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs font-semibold text-slate-700">
+                      ₹{Number(order.totalPoValue || 0).toLocaleString('en-IN')}
+                    </span>
+                    <span className={`inline-block px-2 py-0.5 text-[11px] font-medium rounded-full ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Middle Grid: Pipeline & Quick Nav */}
