@@ -24,6 +24,7 @@ const emptyForm = () => ({
 
 export default function OrderCancelPage() {
   const [orders, setOrders]                 = useState([]);
+  const [dispatchEntries, setDispatchEntries] = useState([]);
   const [cancelEntries, setCancelEntries]   = useState([]);
   const [maxCancelSeq, setMaxCancelSeq]     = useState(0);
   const [loading, setLoading]               = useState(true);
@@ -47,8 +48,9 @@ export default function OrderCancelPage() {
     else setLoading(true);
     setError('');
     try {
-      const [ordersRes, cancelRes] = await Promise.all([
+      const [ordersRes, dispatchRes, cancelRes] = await Promise.all([
         api.getOrders(),
+        api.getDispatchEntries(),
         api.getOrderCancelEntries(),
       ]);
 
@@ -56,6 +58,10 @@ export default function OrderCancelPage() {
         setOrders(ordersRes.data);
       } else {
         setError(ordersRes?.error || 'Could not fetch orders from Google Sheets.');
+      }
+
+      if (dispatchRes && dispatchRes.success && Array.isArray(dispatchRes.data)) {
+        setDispatchEntries(dispatchRes.data);
       }
 
       if (cancelRes && cancelRes.success && Array.isArray(cancelRes.data)) {
@@ -131,6 +137,21 @@ export default function OrderCancelPage() {
     [orderLineOptions, form.orderKey]
   );
 
+  // Dispatched quantity per DO+Product, so the modal can show how much of an
+  // order line is already dispatched vs. still pending (and worth cancelling).
+  const dispatchedByLineKey = useMemo(() => {
+    const map = {};
+    dispatchEntries.forEach((e) => {
+      const key = `${(e.doNumber || '').trim().toLowerCase()}|${(e.productName || '').trim().toLowerCase()}`;
+      map[key] = (map[key] || 0) + (parseFloat(e.qtyToBeDispatched) || 0);
+    });
+    return map;
+  }, [dispatchEntries]);
+
+  const getDispatchedQty = (line) =>
+    dispatchedByLineKey[`${(line.doNumber || '').trim().toLowerCase()}|${(line.productName || '').trim().toLowerCase()}`] || 0;
+  const getPendingQty = (line) => Math.max(0, (Number(line.quantity) || 0) - getDispatchedQty(line));
+
   const handleOpenRequest = () => {
     setForm(emptyForm());
     setIsRequestOpen(true);
@@ -140,7 +161,7 @@ export default function OrderCancelPage() {
     const line = orderLineOptions.find((o) => o.orderKey === orderKey);
     setForm({
       orderKey,
-      qty: line ? line.quantity : '',
+      qty: line ? getPendingQty(line) : '',
       reason: '',
     });
   };
@@ -454,6 +475,18 @@ export default function OrderCancelPage() {
                 <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Order Qty</p>
                 <p className="font-semibold text-slate-800">
                   {fmtQty(selectedOrderLine.quantity)}{selectedOrderLine.typeOfMeasurement ? ` ${selectedOrderLine.typeOfMeasurement}` : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Dispatched Qty</p>
+                <p className="font-semibold text-slate-800">
+                  {fmtQty(getDispatchedQty(selectedOrderLine))}{selectedOrderLine.typeOfMeasurement ? ` ${selectedOrderLine.typeOfMeasurement}` : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Pending Qty</p>
+                <p className="font-semibold text-amber-600">
+                  {fmtQty(getPendingQty(selectedOrderLine))}{selectedOrderLine.typeOfMeasurement ? ` ${selectedOrderLine.typeOfMeasurement}` : ''}
                 </p>
               </div>
             </div>
