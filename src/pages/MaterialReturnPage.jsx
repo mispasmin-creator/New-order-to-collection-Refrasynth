@@ -13,6 +13,7 @@ import {
   PackageCheck,
   FileText,
   Send,
+  Check,
 } from 'lucide-react';
 
 const fmtQty = (n) => {
@@ -52,6 +53,14 @@ const getStage = (e) => {
   if (!e.actual4) return 4;
   return 0;
 };
+
+// The sheet's own section headers, used as the step labels/tooltips
+const STAGE_STEPS = [
+  { key: 1, short: 'Logistics', full: 'Arrange Logistic For Lift Return Material' },
+  { key: 2, short: 'Receipt', full: 'Recived Return Material From Party' },
+  { key: 3, short: 'Issue Note', full: 'Issue Note' },
+  { key: 4, short: 'Send', full: 'Send to Party' },
+];
 
 export default function MaterialReturnPage() {
   const [orders, setOrders]                 = useState([]);
@@ -326,22 +335,41 @@ export default function MaterialReturnPage() {
     return out;
   };
 
-  const stageBadge = (entry) => {
-    const stage = getStage(entry);
-    if (stage === 0) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-          <CheckCircle2 className="w-3 h-3" /> Completed
-        </span>
-      );
-    }
-    const labels = {
-      1: 'Awaiting Logistics',
-      2: 'Awaiting Receipt',
-      3: 'Awaiting Issue Note',
-      4: 'Awaiting Send To Party',
-    };
-    return <span className="text-amber-600 font-medium text-[11px]">{labels[stage]}</span>;
+  // 4-step visual progress tracker matching the sheet's own section headers —
+  // completed steps show a check, the current step is highlighted, rest are grey.
+  const stageStepper = (entry) => {
+    const stage = getStage(entry); // 0 = fully completed
+    return (
+      <div className="flex items-center">
+        {STAGE_STEPS.map((step, idx) => {
+          const isDone = stage === 0 || step.key < stage;
+          const isCurrent = step.key === stage;
+          return (
+            <React.Fragment key={step.key}>
+              {idx > 0 && (
+                <div className={`w-3 h-px shrink-0 ${isDone ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+              )}
+              <div className="flex flex-col items-center gap-0.5" title={step.full}>
+                <div
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                    isDone
+                      ? 'bg-emerald-500 text-white'
+                      : isCurrent
+                      ? 'bg-amber-500 text-white ring-2 ring-amber-200'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  {isDone ? <Check className="w-3 h-3" /> : step.key}
+                </div>
+                <span className={`text-[9px] font-medium whitespace-nowrap ${isCurrent ? 'text-amber-600' : isDone ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {step.short}
+                </span>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -446,7 +474,7 @@ export default function MaterialReturnPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Reason</th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Stage</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Progress</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -516,7 +544,7 @@ export default function MaterialReturnPage() {
                         {entry.reason || '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap">
-                        {stageBadge(entry)}
+                        {stageStepper(entry)}
                       </td>
                     </tr>
                   );
