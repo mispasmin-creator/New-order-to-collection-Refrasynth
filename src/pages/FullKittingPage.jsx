@@ -216,15 +216,20 @@ export default function FullKittingPage() {
         return;
       }
 
-      // "Yes" also writes one row per product into the 'Full Kitting' sheet,
-      // carrying forward the transporter details already captured earlier.
+      // "Yes" also writes a single combined row into the 'Full Kitting' sheet for
+      // the whole shipment (not one per product), carrying forward the transporter
+      // details already captured earlier.
       if (kittingChoice === 'Yes') {
-        const kittingRows = pending.map((e) => ({
+        const primary = pending[0];
+        const doNumbers = pending.map((e) => e.doNumber).filter(Boolean).join(', ');
+        const lgstNumbers = pending.map((e) => e.lgstNo).filter(Boolean).join(', ');
+
+        const kittingRows = [{
           'Timestamp': istTime,
-          'Delivery Order No': e.doNumber || '',
-          'LGST-Sr Number': e.lgstNo || '',
-          'Party Name': e.partyNames || e.partyName || '',
-          'Type Of Transporting': e.typeOfTransporting || '',
+          'Delivery Order No': doNumbers,
+          'LGST-Sr Number': lgstNumbers,
+          'Party Name': primary.partyNames || primary.partyName || '',
+          'Type Of Transporting': primary.typeOfTransporting || '',
           'Transporter Name': transporterName || '',
           'Truck No.': truckNo || '',
           'Vehicle No. Plate Image': vehiclePlateImage || '',
@@ -235,7 +240,7 @@ export default function FullKittingPage() {
           'Transport Rate @Per Matric Ton  ': transportRatePerMt || '',
           'Fixed Amount': fixedAmount || '',
           'Transport Amount': transportAmount || '',
-        }));
+        }];
 
         const kittingRes = await api.insertFullKittingRows(kittingRows);
         if (!kittingRes || !kittingRes.success) {
