@@ -206,8 +206,8 @@ export default function WorkflowPage({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 space-y-4">
-      <div className="sticky top-0 z-30 bg-slate-50 -mx-4 -mt-4 px-4 pt-4 pb-4 space-y-4">
+    <div className="h-full flex flex-col bg-slate-50 space-y-4">
+      <div className="shrink-0 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-xl ${clr.btn} text-white shadow-sm`}>{pageIcon}</div>
@@ -241,8 +241,8 @@ export default function WorkflowPage({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] border-t border-slate-200">
+      <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 shadow-2xs flex flex-col">
+        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto border-t border-slate-200">
           <table className="w-full text-left text-xs text-slate-600 border-collapse">
             <thead className="sticky top-0 bg-slate-100 z-20 shadow-xs border-b border-slate-300 font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
               <tr>

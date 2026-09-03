@@ -61,7 +61,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto space-y-6">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

@@ -282,9 +282,9 @@ export default function ManageUsersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col space-y-6">
       {/* Sticky Page Header + Alerts + Filters (stays fixed while table scrolls) */}
-      <div className="sticky top-0 z-30 bg-slate-50 -mt-6 pt-6 pb-1 space-y-6">
+      <div className="shrink-0 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -371,7 +371,7 @@ export default function ManageUsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-y-auto">
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center text-slate-400">
             <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
