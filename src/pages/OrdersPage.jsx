@@ -174,6 +174,9 @@ export default function OrdersPage() {
   // Dynamic Master Tab Data from Google Sheets
   const [masterData, setMasterData] = useState({});
 
+  // Dispatch Tab Entries — used to show Dispatched/Pending Qty per order
+  const [dispatchEntries, setDispatchEntries] = useState([]);
+
   const fetchMasterData = async () => {
     try {
       const res = await api.getMasterData();
@@ -192,11 +195,14 @@ export default function OrdersPage() {
     setError('');
 
     try {
-      const res = await api.getOrders();
+      const [res, dispatchRes] = await Promise.all([api.getOrders(), api.getDispatchEntries()]);
       if (res && res.success && Array.isArray(res.data)) {
         setOrders(res.data);
       } else {
         setError(res?.error || 'Failed to fetch orders from Google Sheets.');
+      }
+      if (dispatchRes && dispatchRes.success && Array.isArray(dispatchRes.data)) {
+        setDispatchEntries(dispatchRes.data);
       }
       if (showSync) {
         await fetchMasterData();
@@ -306,6 +312,20 @@ export default function OrdersPage() {
     });
     return groups;
   }, [filteredOrders]);
+
+  // Total qty already dispatched per DO number (sums every Dispatch sheet row)
+  const dispatchedByDo = useMemo(() => {
+    const map = {};
+    dispatchEntries.forEach((e) => {
+      const key = (e.doNumber || '').trim().toLowerCase();
+      if (!key) return;
+      map[key] = (map[key] || 0) + (parseFloat(e.qtyToBeDispatched) || 0);
+    });
+    return map;
+  }, [dispatchEntries]);
+
+  const getDispatchedQty = (order) => dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
+  const getPendingQty = (order) => Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order));
 
   // Dropdown Options strictly synchronized with Google Sheet Master tab
   const firmOptions = useMemo(() => {
@@ -656,21 +676,23 @@ export default function OrdersPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Party PO Date</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Party Names</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Order Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Dispatched Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Pending Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="38" className="py-20 text-center text-slate-400">
+                  <td colSpan="40" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                     <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                   </td>
                 </tr>
               ) : groupedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="38" className="py-16 text-center text-slate-400">
+                  <td colSpan="40" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">No orders recorded in Google Sheets yet</h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -692,6 +714,8 @@ export default function OrdersPage() {
                   const sameMeasurement = orderRows.every((o) => o.typeOfMeasurement === order.typeOfMeasurement);
                   const totalQuantity = orderRows.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
                   const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+                  const dispatchedQtySum = orderRows.reduce((sum, o) => sum + getDispatchedQty(o), 0);
+                  const pendingQtySum = orderRows.reduce((sum, o) => sum + getPendingQty(o), 0);
 
                   return (
                     <tr key={group.key} className="hover:bg-slate-50/80 transition-colors">
@@ -742,9 +766,61 @@ export default function OrdersPage() {
                         {isGroup ? `${orderRows.length} products` : (order.productName || '—')}
                       </td>
 
-                      {/* 6. Quantity */}
-                      <td className="px-3.5 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                        {totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${isGroup && sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}
+                      {/* 6. Order Qty */}
+                      <td className="px-3.5 py-3 text-right font-medium text-slate-800">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1">{o.doNumber}</span>
+                                {(Number(o.quantity) || 0).toLocaleString('en-IN')}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {totalQuantity.toLocaleString('en-IN')}{sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}</span>
+                        )}
+                      </td>
+
+                      {/* Dispatched Qty */}
+                      <td className="px-3.5 py-3 text-right text-slate-700">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1">{o.doNumber}</span>
+                                {getDispatchedQty(o).toLocaleString('en-IN')}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {dispatchedQtySum.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{dispatchedQtySum.toLocaleString('en-IN')}</span>
+                        )}
+                      </td>
+
+                      {/* Pending Qty */}
+                      <td className="px-3.5 py-3 text-right font-semibold text-amber-600">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1 font-normal">{o.doNumber}</span>
+                                {getPendingQty(o).toLocaleString('en-IN')}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {pendingQtySum.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{pendingQtySum.toLocaleString('en-IN')}</span>
+                        )}
                       </td>
 
                       {/* Total PO Value */}
