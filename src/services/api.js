@@ -1010,6 +1010,19 @@ export const api = {
               partyPoCopy: (row[colMap['party po copy']] ?? '').toString().trim(),
               rateOfMaterial: (row[colMap['rate of material']] ?? '').toString().trim(),
               lgstNo,
+              // Load Material stage
+              loadActual: formatAppDate(row[colMap['actual']] || ''),
+              loadImage1: (row[colMap['load iamge 1']] ?? '').toString().trim(),
+              loadImage2: (row[colMap['load iamge 2']] ?? '').toString().trim(),
+              // Weighment Entry stage
+              weighmentActual: formatAppDate(row[colMap['actual2']] || ''),
+              weighmentImage1: (row[colMap['weighment  iamge 1']] ?? '').toString().trim(),
+              weighmentImage2: (row[colMap['weighment  iamge 2']] ?? '').toString().trim(),
+              weighmentImage3: (row[colMap['weighment  iamge 3']] ?? '').toString().trim(),
+              // Make Invoice stage
+              invoiceActual: formatAppDate(row[colMap['actual 3']] || ''),
+              billNo: (row[colMap['bill no.']] ?? '').toString().trim(),
+              billCopy: (row[colMap['bill copy']] ?? '').toString().trim(),
             });
           }
 
@@ -1037,6 +1050,22 @@ export const api = {
       return { success: true, message: `Successfully inserted ${rows.length} rows into Billing` };
     }
     return { success: true, message: 'Inserted into mock' };
+  },
+
+  async updateBillingFields(rowIndex, fieldsObj) {
+    if (!FORCE_MOCK) {
+      const res = await sendToAppsScript({
+        action: 'update',
+        sheetName: 'Billing',
+        rowIndex: rowIndex,
+        rowDataObj: JSON.stringify(fieldsObj),
+      });
+      if (res && res.success) {
+        return { success: true, message: 'Billing sheet updated successfully!' };
+      }
+      return { success: false, error: res?.error || 'Failed to update Billing sheet' };
+    }
+    return { success: true, message: 'Updated in mock' };
   },
 
   async getDispatchEntries() {

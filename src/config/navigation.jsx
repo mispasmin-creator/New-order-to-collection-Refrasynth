@@ -21,6 +21,7 @@ import ReceivedAccountsPage from '../pages/ReceivedAccountsPage';
 import CheckForDeliveryPage from '../pages/CheckForDeliveryPage';
 import DispatchPlanningPage from '../pages/DispatchPlanningPage';
 import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
+import LoadMaterialPage from '../pages/LoadMaterialPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -115,6 +116,14 @@ export const navConfig = [
     path: '/arrange-logistics',
     icon: 'Boxes',
     component: ArrangeLogisticsPage,
+    inSidebar: true,
+  },
+  {
+    id: 'load-material',
+    label: 'Load Material',
+    path: '/load-material',
+    icon: 'Package',
+    component: LoadMaterialPage,
     inSidebar: true,
   },
   {
