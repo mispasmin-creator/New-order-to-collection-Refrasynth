@@ -21,7 +21,7 @@ const fmtQty = (n) => {
 
 const emptyTransporter = () => ({
   name: '',
-  rateType: 'Per MT',
+  rateType: 'Per Matric Ton rate',
   rate: '',
   truckNo: '',
   vehiclePlateImage: '',
@@ -312,9 +312,9 @@ export default function ArrangeLogisticsPage() {
         validTransporters.forEach((t) => {
           currentSeq += 1;
           const lgstNo = `LGST-${String(currentSeq).padStart(2, '0')}`;
-          const rateTypeStr = t.rateType || 'Per MT';
-          const isPerMt = rateTypeStr === 'Per MT';
-          const isFixed = rateTypeStr === 'Fixed';
+          const rateTypeStr = t.rateType || 'Per Matric Ton rate';
+          const isPerMt = rateTypeStr === 'Per Matric Ton rate';
+          const isFixed = rateTypeStr === 'Fixed Amount';
           const rateVal = t.rate ? t.rate.toString().trim() : '';
 
           const rowObj = {
@@ -691,8 +691,8 @@ export default function ArrangeLogisticsPage() {
                           onChange={(e) => handleTransporterChange(idx, 'rateType', e.target.value)}
                           className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                         >
-                          <option value="Per MT">Per MT</option>
-                          <option value="Per Trip">Per Trip</option>
+                          <option value="Fixed Amount">Fixed Amount</option>
+                          <option value="Per Matric Ton rate">Per Matric Ton rate</option>
                           {/* <option value="Fixed">Fixed</option>
                           <option value="Per Kg">Per Kg</option> */}
                         </select>
@@ -723,7 +723,7 @@ export default function ArrangeLogisticsPage() {
                           type="text"
                           value={t.truckNo}
                           onChange={(e) => handleTransporterChange(idx, 'truckNo', e.target.value)}
-                          placeholder="CG04AB1234"
+                          placeholder=""
                           className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                         />
                       </div>
@@ -735,7 +735,7 @@ export default function ArrangeLogisticsPage() {
                           type="tel"
                           value={t.driverMobileNo}
                           onChange={(e) => handleTransporterChange(idx, 'driverMobileNo', e.target.value)}
-                          placeholder="98765 43210"
+                          placeholder=""
                           className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                         />
                       </div>
@@ -750,7 +750,7 @@ export default function ArrangeLogisticsPage() {
                           type="text"
                           value={t.biltyNo}
                           onChange={(e) => handleTransporterChange(idx, 'biltyNo', e.target.value)}
-                          placeholder="Bilty number"
+                          placeholder=""
                           className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                         />
                       </div>
@@ -763,7 +763,7 @@ export default function ArrangeLogisticsPage() {
                           step="0.01"
                           value={t.actualTruckQty}
                           onChange={(e) => handleTransporterChange(idx, 'actualTruckQty', e.target.value)}
-                          placeholder="0.00"
+                          placeholder=""
                           className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
                         />
                       </div>
