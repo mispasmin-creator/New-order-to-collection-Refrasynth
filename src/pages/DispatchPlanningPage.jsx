@@ -470,30 +470,84 @@ export default function DispatchPlanningPage() {
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700" title={isGroup ? productNames.join(', ') : undefined}>
                         {isGroup ? `${orderRows.length} products` : (order.productName || '—')}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-800">
-                        {totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${isGroup && sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}
+                      <td className="px-3.5 py-3 text-right text-slate-800">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1">{o.doNumber}</span>
+                                {fmtQty(Number(o.quantity) || 0)}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {totalQuantity.toLocaleString('en-IN')}{sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}</span>
+                        )}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
-                        {fmtQty(dispatchedQtySum)}
+                      <td className="px-3.5 py-3 text-right text-slate-700">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1">{o.doNumber}</span>
+                                {fmtQty(dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0)}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {fmtQty(dispatchedQtySum)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{fmtQty(dispatchedQtySum)}</span>
+                        )}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap text-right font-semibold text-amber-600">
-                        {fmtQty(remainingSum)}
+                      <td className="px-3.5 py-3 text-right font-semibold text-amber-600">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1 font-normal">{o.doNumber}</span>
+                                {fmtQty(getRemainingQty(o))}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {fmtQty(remainingSum)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{fmtQty(remainingSum)}</span>
+                        )}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-right font-bold text-emerald-700">
                         {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap">
+                      <td className="px-3.5 py-3">
                         {dispatchedList.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {dispatchedList.map((e, i) => (
-                              <span
-                                key={e.dNumber ? `${e.dNumber}-${i}` : i}
-                                className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-semibold"
-                                title={`${e.qtyToBeDispatched || ''} on ${e.dateOfDispatch || ''}`}
-                              >
-                                {e.dNumber}
-                              </span>
-                            ))}
+                          <div className="space-y-1">
+                            {orderRows.map((o) => {
+                              const doKey = (o.doNumber || '').trim().toLowerCase();
+                              const doEntries = dispatchEntries.filter((e) => (e.doNumber || '').trim().toLowerCase() === doKey);
+                              if (doEntries.length === 0) return null;
+                              return (
+                                <div key={o.doNumber} className="flex flex-wrap items-center gap-1">
+                                  {isGroup && (
+                                    <span className="text-[10px] font-mono text-slate-400 mr-0.5">{o.doNumber}:</span>
+                                  )}
+                                  {doEntries.map((e, i) => (
+                                    <span
+                                      key={e.dNumber ? `${e.dNumber}-${i}` : i}
+                                      className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-semibold"
+                                      title={`${e.qtyToBeDispatched || ''} on ${e.dateOfDispatch || ''}`}
+                                    >
+                                      {e.dNumber}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })}
                             {isPartial && (
                               <span className="inline-block px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold">
                                 Partial
