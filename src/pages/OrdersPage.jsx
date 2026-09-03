@@ -177,6 +177,9 @@ export default function OrdersPage() {
   // Dispatch Tab Entries — used to show Dispatched/Pending Qty per order
   const [dispatchEntries, setDispatchEntries] = useState([]);
 
+  // Order Cancel Tab Entries — used to show Order Cancel Qty per order
+  const [cancelEntries, setCancelEntries] = useState([]);
+
   const fetchMasterData = async () => {
     try {
       const res = await api.getMasterData();
@@ -195,7 +198,11 @@ export default function OrdersPage() {
     setError('');
 
     try {
-      const [res, dispatchRes] = await Promise.all([api.getOrders(), api.getDispatchEntries()]);
+      const [res, dispatchRes, cancelRes] = await Promise.all([
+        api.getOrders(),
+        api.getDispatchEntries(),
+        api.getOrderCancelEntries(),
+      ]);
       if (res && res.success && Array.isArray(res.data)) {
         setOrders(res.data);
       } else {
@@ -203,6 +210,9 @@ export default function OrdersPage() {
       }
       if (dispatchRes && dispatchRes.success && Array.isArray(dispatchRes.data)) {
         setDispatchEntries(dispatchRes.data);
+      }
+      if (cancelRes && cancelRes.success && Array.isArray(cancelRes.data)) {
+        setCancelEntries(cancelRes.data);
       }
       if (showSync) {
         await fetchMasterData();
@@ -326,6 +336,20 @@ export default function OrdersPage() {
 
   const getDispatchedQty = (order) => dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
   const getPendingQty = (order) => Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order));
+
+  // Approved cancellation qty per DO+Product (Pending/Rejected requests don't count)
+  const cancelledByKey = useMemo(() => {
+    const map = {};
+    cancelEntries.forEach((e) => {
+      if (e.status !== 'Approved') return;
+      const key = `${(e.doNumber || '').trim().toLowerCase()}|${(e.productName || '').trim().toLowerCase()}`;
+      map[key] = (map[key] || 0) + (parseFloat(e.qty) || 0);
+    });
+    return map;
+  }, [cancelEntries]);
+
+  const getCancelledQty = (order) =>
+    cancelledByKey[`${(order.doNumber || '').trim().toLowerCase()}|${(order.productName || '').trim().toLowerCase()}`] || 0;
 
   // Dropdown Options strictly synchronized with Google Sheet Master tab
   const firmOptions = useMemo(() => {
@@ -679,20 +703,21 @@ export default function OrdersPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Order Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Dispatched Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Pending Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Order Cancel Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="40" className="py-20 text-center text-slate-400">
+                  <td colSpan="41" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                     <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                   </td>
                 </tr>
               ) : groupedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="40" className="py-16 text-center text-slate-400">
+                  <td colSpan="41" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">No orders recorded in Google Sheets yet</h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
@@ -716,6 +741,7 @@ export default function OrdersPage() {
                   const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
                   const dispatchedQtySum = orderRows.reduce((sum, o) => sum + getDispatchedQty(o), 0);
                   const pendingQtySum = orderRows.reduce((sum, o) => sum + getPendingQty(o), 0);
+                  const cancelledQtySum = orderRows.reduce((sum, o) => sum + getCancelledQty(o), 0);
 
                   return (
                     <tr key={group.key} className="hover:bg-slate-50/80 transition-colors">
@@ -820,6 +846,25 @@ export default function OrdersPage() {
                           </div>
                         ) : (
                           <span className="whitespace-nowrap">{pendingQtySum.toLocaleString('en-IN')}</span>
+                        )}
+                      </td>
+
+                      {/* Order Cancel Qty */}
+                      <td className="px-3.5 py-3 text-right font-semibold text-rose-600">
+                        {isGroup ? (
+                          <div className="space-y-0.5">
+                            {orderRows.map((o) => (
+                              <div key={o.doNumber} className="text-[11px] whitespace-nowrap">
+                                <span className="text-slate-400 font-mono mr-1 font-normal">{o.doNumber}</span>
+                                {getCancelledQty(o).toLocaleString('en-IN')}
+                              </div>
+                            ))}
+                            <div className="text-[11px] font-bold border-t border-slate-200 pt-0.5 mt-0.5">
+                              Total: {cancelledQtySum.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="whitespace-nowrap">{cancelledQtySum ? cancelledQtySum.toLocaleString('en-IN') : '—'}</span>
                         )}
                       </td>
 
