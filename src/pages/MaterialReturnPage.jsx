@@ -373,6 +373,45 @@ export default function MaterialReturnPage() {
     );
   };
 
+  // Action column, tab-wise — Step 1-4 shown as a 2x2 tab grid. Only the
+  // entry's current step is clickable (opens that step's action modal);
+  // completed steps show a check, upcoming steps stay disabled/greyed.
+  const stageTabs = (entry) => {
+    const stage = getStage(entry); // 0 = fully completed
+    return (
+      <div className="grid grid-cols-2 gap-1 w-[128px]">
+        {STAGE_STEPS.map((step) => {
+          const isDone = stage === 0 || step.key < stage;
+          const isCurrent = step.key === stage;
+          const Icon = STAGE_META[step.key].icon;
+          return (
+            <button
+              key={step.key}
+              type="button"
+              disabled={!isCurrent}
+              onClick={() => isCurrent && handleOpenStageAction(entry)}
+              title={step.full}
+              className={`flex items-center gap-1 px-1.5 py-1 rounded-md text-[9px] font-semibold transition-all ${
+                isCurrent
+                  ? 'bg-teal-600 text-white shadow-sm hover:bg-teal-700 cursor-pointer'
+                  : isDone
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-default'
+                  : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-70'
+              }`}
+            >
+              {isDone && !isCurrent ? (
+                <Check className="w-2.5 h-2.5 shrink-0" />
+              ) : (
+                <Icon className="w-2.5 h-2.5 shrink-0" />
+              )}
+              <span className="truncate">Step {step.key}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-50 space-y-4">
       {/* ── Sticky Page Header + Alerts + Filters ── */}
@@ -530,22 +569,15 @@ export default function MaterialReturnPage() {
               ) : (
                 filteredEntries.map((entry) => {
                   const stage = getStage(entry);
-                  const meta = STAGE_META[stage];
-                  const StageIcon = meta?.icon;
                   return (
                     <tr key={entry.rowIndex} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                      <td className="sticky left-0 bg-white z-10 px-3 py-2 whitespace-nowrap border-r border-slate-200 shadow-xs">
                         {stage === 0 ? (
-                          <span className="text-slate-300 text-[11px]">—</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" /> Completed
+                          </span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenStageAction(entry)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all bg-teal-600 hover:bg-teal-700 text-white"
-                          >
-                            {StageIcon && <StageIcon className="w-3.5 h-3.5" />}
-                            {meta.label}
-                          </button>
+                          stageTabs(entry)
                         )}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-teal-600">
