@@ -335,21 +335,22 @@ export default function OrdersPage() {
   }, [dispatchEntries]);
 
   const getDispatchedQty = (order) => dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
-  const getPendingQty = (order) => Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order));
 
-  // Approved cancellation qty per DO+Product (Pending/Rejected requests don't count)
-  const cancelledByKey = useMemo(() => {
+  // Approved cancellation qty per DO number (Pending/Rejected requests don't count)
+  const cancelledByDo = useMemo(() => {
     const map = {};
     cancelEntries.forEach((e) => {
       if (e.status !== 'Approved') return;
-      const key = `${(e.doNumber || '').trim().toLowerCase()}|${(e.productName || '').trim().toLowerCase()}`;
+      const key = (e.doNumber || '').trim().toLowerCase();
+      if (!key) return;
       map[key] = (map[key] || 0) + (parseFloat(e.qty) || 0);
     });
     return map;
   }, [cancelEntries]);
 
-  const getCancelledQty = (order) =>
-    cancelledByKey[`${(order.doNumber || '').trim().toLowerCase()}|${(order.productName || '').trim().toLowerCase()}`] || 0;
+  const getCancelledQty = (order) => cancelledByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
+  const getPendingQty = (order) =>
+    Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order) - getCancelledQty(order));
 
   // Dropdown Options strictly synchronized with Google Sheet Master tab
   const firmOptions = useMemo(() => {

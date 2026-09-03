@@ -65,10 +65,18 @@ export default function usePendingCounts() {
         if (!key) return;
         dispatchedByDo[key] = (dispatchedByDo[key] || 0) + (parseFloat(e.qtyToBeDispatched) || 0);
       });
+      const cancelledByDo = {};
+      orderCancelEntries.forEach((e) => {
+        if (e.status !== 'Approved') return;
+        const key = (e.doNumber || '').trim().toLowerCase();
+        if (!key) return;
+        cancelledByDo[key] = (cancelledByDo[key] || 0) + (parseFloat(e.qty) || 0);
+      });
       const getRemainingQty = (o) => {
         const orderQty = Number(o.quantity) || 0;
         const dispatched = dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0;
-        return Math.max(0, orderQty - dispatched);
+        const cancelled = cancelledByDo[(o.doNumber || '').trim().toLowerCase()] || 0;
+        return Math.max(0, orderQty - dispatched - cancelled);
       };
 
       // Enrich each dispatch entry with the order's PO/party details, matching

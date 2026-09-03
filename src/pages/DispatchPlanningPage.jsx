@@ -14,7 +14,7 @@ import {
   Eye,
 } from 'lucide-react';
 
-const TRANSPORTER_TYPE_OPTIONS = ['FOR', 'Ex-Works', 'To Pay', 'Self Pickup'];
+const TRANSPORTER_TYPE_OPTIONS = ['For', 'Ex Factory'];
 const TEST_CERTIFICATE_OPTIONS = ['Yes', 'No'];
 
 const fmtQty = (n) => {
@@ -34,6 +34,9 @@ export default function DispatchPlanningPage() {
   // Dispatch Tab Entries from Google Sheets
   const [dispatchEntries, setDispatchEntries] = useState([]);
   const [maxDSeq, setMaxDSeq]                 = useState(0);
+
+  // Order Cancel Tab Entries — Approved cancellations reduce remaining qty to dispatch
+  const [cancelEntries, setCancelEntries]     = useState([]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen]       = useState(false);
@@ -57,9 +60,10 @@ export default function DispatchPlanningPage() {
     else setLoading(true);
     setError('');
     try {
-      const [ordersRes, dispatchRes] = await Promise.all([
+      const [ordersRes, dispatchRes, cancelRes] = await Promise.all([
         api.getOrders(),
         api.getDispatchEntries(),
+        api.getOrderCancelEntries(),
       ]);
 
       if (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) {
@@ -73,6 +77,10 @@ export default function DispatchPlanningPage() {
         if (dispatchRes.maxDSeq) {
           setMaxDSeq(dispatchRes.maxDSeq);
         }
+      }
+
+      if (cancelRes && cancelRes.success && Array.isArray(cancelRes.data)) {
+        setCancelEntries(cancelRes.data);
       }
     } catch (err) {
       setError(err.message || 'Error fetching data.');
@@ -102,10 +110,23 @@ export default function DispatchPlanningPage() {
     return map;
   }, [dispatchEntries]);
 
+  // Approved cancellation qty per DO number (Pending/Rejected requests don't count)
+  const cancelledByDo = useMemo(() => {
+    const map = {};
+    cancelEntries.forEach((e) => {
+      if (e.status !== 'Approved') return;
+      const key = (e.doNumber || '').trim().toLowerCase();
+      if (!key) return;
+      map[key] = (map[key] || 0) + (parseFloat(e.qty) || 0);
+    });
+    return map;
+  }, [cancelEntries]);
+
   const getRemainingQty = (order) => {
     const orderQty = Number(order.quantity) || 0;
     const dispatched = dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
-    return Math.max(0, orderQty - dispatched);
+    const cancelled = cancelledByDo[(order.doNumber || '').trim().toLowerCase()] || 0;
+    return Math.max(0, orderQty - dispatched - cancelled);
   };
 
   // Base list: ONLY orders passed Stage 3 (Check for Delivery: actual3 exists)
