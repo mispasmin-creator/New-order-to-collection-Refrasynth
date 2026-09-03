@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Boxes,
   Truck,
-  Plus,
-  Trash2,
   Check,
   Eye,
 } from 'lucide-react';
@@ -266,16 +264,6 @@ export default function ArrangeLogisticsPage() {
   const handleOpenView = (batch) => {
     setViewBatch(batch);
     setIsViewModalOpen(true);
-  };
-
-  const handleAddTransporter = () => {
-    if (transporters.length >= 10) return;
-    setTransporters((prev) => [...prev, emptyTransporter()]);
-  };
-
-  const handleRemoveTransporter = (index) => {
-    if (transporters.length <= 1) return;
-    setTransporters((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleTransporterChange = (index, field, value) => {
@@ -663,50 +651,16 @@ export default function ArrangeLogisticsPage() {
               </div>
             </div>
 
-            {/* 2. Transporter Options Header & Add Button */}
+            {/* 2. Transporter Details */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-800">Transporter Options</h3>
-                  <p className="text-[11px] text-slate-400">
-                    Provide options for this shipment (max 10).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddTransporter}
-                  disabled={transporters.length >= 10}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs disabled:opacity-50"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Transporter
-                </button>
-              </div>
+              <h3 className="text-xs font-bold text-slate-800 mb-3">Transporter Details</h3>
 
-              {/* Transporter Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 gap-3.5">
                 {transporters.map((t, idx) => (
                   <div
                     key={idx}
                     className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 relative"
                   >
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                        TRANSPORTER {idx + 1}
-                      </span>
-                      {transporters.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTransporter(idx)}
-                          className="text-rose-400 hover:text-rose-600 transition-colors p-0.5 rounded"
-                          title="Remove Transporter"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
                     {/* NAME / AGENCY */}
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
@@ -739,8 +693,8 @@ export default function ArrangeLogisticsPage() {
                         >
                           <option value="Per MT">Per MT</option>
                           <option value="Per Trip">Per Trip</option>
-                          <option value="Fixed">Fixed</option>
-                          <option value="Per Kg">Per Kg</option>
+                          {/* <option value="Fixed">Fixed</option>
+                          <option value="Per Kg">Per Kg</option> */}
                         </select>
                       </div>
 
