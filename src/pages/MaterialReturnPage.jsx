@@ -341,28 +341,28 @@ export default function MaterialReturnPage() {
   const stageStepper = (entry) => {
     const stage = getStage(entry); // 0 = fully completed
     return (
-      <div className="flex items-center">
+      <div className="flex items-start">
         {STAGE_STEPS.map((step, idx) => {
           const isDone = stage === 0 || step.key < stage;
           const isCurrent = step.key === stage;
           return (
             <React.Fragment key={step.key}>
               {idx > 0 && (
-                <div className={`w-3 h-px shrink-0 ${isDone ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                <div className={`w-5 h-0.5 mt-3.5 shrink-0 ${isDone ? 'bg-emerald-400' : 'bg-slate-300'}`} />
               )}
-              <div className="flex flex-col items-center gap-0.5" title={step.full}>
+              <div className="flex flex-col items-center gap-1 w-11" title={step.full}>
                 <div
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 border-2 ${
                     isDone
-                      ? 'bg-emerald-500 text-white'
+                      ? 'bg-emerald-500 border-emerald-500 text-white'
                       : isCurrent
-                      ? 'bg-amber-500 text-white ring-2 ring-amber-200'
-                      : 'bg-slate-200 text-slate-500'
+                      ? 'bg-amber-500 border-amber-200 text-white ring-2 ring-amber-200'
+                      : 'bg-white border-slate-300 text-slate-400'
                   }`}
                 >
-                  {isDone ? <Check className="w-3 h-3" /> : step.key}
+                  {isDone ? <Check className="w-3.5 h-3.5" /> : step.key}
                 </div>
-                <span className={`text-[9px] font-medium whitespace-nowrap ${isCurrent ? 'text-amber-600' : isDone ? 'text-emerald-600' : 'text-slate-400'}`}>
+                <span className={`text-[9px] font-semibold whitespace-nowrap ${isCurrent ? 'text-amber-600' : isDone ? 'text-emerald-600' : 'text-slate-400'}`}>
                   {step.short}
                 </span>
               </div>
