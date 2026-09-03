@@ -1034,5 +1034,84 @@ export const api = {
     return { success: true, message: 'Inserted into mock' };
   },
 
+  async getDispatchEntries() {
+    if (!FORCE_MOCK) {
+      try {
+        const res = await sendToAppsScript({
+          action: 'read',
+          sheet: 'Dispatch',
+        });
+        if (res && res.success && Array.isArray(res.data)) {
+          let headerRowIdx = 5; // Default row 6 (0-indexed 5)
+          const colMap = {};
+          for (let r = 0; r < Math.min(res.data.length, 7); r++) {
+            const rowArr = res.data[r] || [];
+            const rowStr = JSON.stringify(rowArr).toUpperCase();
+            if (rowStr.includes('DELIVERY ORDER') || rowStr.includes('D NUMBER') || rowStr.includes('QTY TO BE DISPATCHED')) {
+              headerRowIdx = r;
+              rowArr.forEach((cell, cIdx) => {
+                const cleanHdr = (cell || '').toString().trim().toLowerCase();
+                if (cleanHdr) {
+                  colMap[cleanHdr] = cIdx;
+                }
+              });
+              break;
+            }
+          }
+
+          const entries = [];
+          let maxDSeq = 0;
+          for (let i = headerRowIdx + 1; i < res.data.length; i++) {
+            const row = res.data[i];
+            if (!row || row.length === 0 || !row.some((c) => c !== null && c !== '')) continue;
+            const doNo = (row[colMap['delivery order no.']] ?? '').toString().trim();
+            const dNo = (row[colMap['d number']] ?? '').toString().trim();
+            if (!doNo && !dNo) continue;
+
+            const m = dNo.match(/D-(\d+)/i);
+            if (m) {
+              const num = parseInt(m[1], 10);
+              if (num > maxDSeq) maxDSeq = num;
+            }
+
+            entries.push({
+              rowIndex: i + 1,
+              timestamp: formatAppDate(row[colMap['timestamp']] || ''),
+              dNumber: dNo,
+              doNumber: doNo,
+              partyName: (row[colMap['party name']] ?? '').toString().trim(),
+              productName: (row[colMap['product name']] ?? '').toString().trim(),
+              qtyToBeDispatched: (row[colMap['qty to be dispatched']] ?? '').toString().trim(),
+              typeOfTransporting: (row[colMap['type of transporting']] ?? '').toString().trim(),
+              dateOfDispatch: formatAppDate(row[colMap['date of dispatch']] || ''),
+            });
+          }
+
+          return { success: true, data: entries, maxDSeq };
+        }
+      } catch (err) {
+        console.warn('Error reading Dispatch entries:', err);
+      }
+    }
+    return { success: true, data: [], maxDSeq: 0 };
+  },
+
+  async insertDispatchRows(rows) {
+    if (!FORCE_MOCK) {
+      for (const rowObj of rows) {
+        const res = await sendToAppsScript({
+          action: 'insert',
+          sheetName: 'Dispatch',
+          rowDataObj: JSON.stringify(rowObj),
+        });
+        if (!res || !res.success) {
+          return { success: false, error: res?.error || 'Failed to insert row into Dispatch' };
+        }
+      }
+      return { success: true, message: `Successfully inserted ${rows.length} rows into Dispatch` };
+    }
+    return { success: true, message: 'Inserted into mock' };
+  },
+
   formatDate: formatAppDate,
 };
