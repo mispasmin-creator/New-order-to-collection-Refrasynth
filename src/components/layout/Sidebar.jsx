@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getSidebarItems, renderNavIcon } from '../../config/navigation';
+import usePendingCounts from '../../hooks/usePendingCounts';
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const STORAGE_KEY = 'sidebarCollapsed';
@@ -9,6 +10,7 @@ const STORAGE_KEY = 'sidebarCollapsed';
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const sidebarItems = getSidebarItems();
+  const { counts: pendingCounts } = usePendingCounts();
 
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -62,44 +64,58 @@ export default function Sidebar() {
 
       {/* Navigation Links */}
       <div className={`flex-1 py-5 overflow-y-auto space-y-1 ${collapsed ? 'px-2' : 'px-3'}`}>
-        {sidebarItems.map((item) => (
-          <NavLink
-            key={item.id}
-            to={item.path}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              `flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                collapsed ? 'px-0 justify-center' : 'px-3.5'
-              } ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <span className={`shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}>
-                  {renderNavIcon(item.icon, 'w-4 h-4')}
-                </span>
-                {!collapsed && (
-                  <>
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.badge && (
+        {sidebarItems.map((item) => {
+          const count = pendingCounts[item.id] ?? item.badge;
+          const hasCount = typeof count === 'number' && count > 0;
+
+          return (
+            <NavLink
+              key={item.id}
+              to={item.path}
+              title={collapsed ? `${item.label}${hasCount ? ` (${count} pending)` : ''}` : undefined}
+              className={({ isActive }) =>
+                `relative flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  collapsed ? 'px-0 justify-center' : 'px-3.5'
+                } ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <span className={`shrink-0 relative ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                    {renderNavIcon(item.icon, 'w-4 h-4')}
+                    {collapsed && hasCount && (
                       <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          isActive ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-700'
+                        className={`absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full text-[9px] font-bold ${
+                          isActive ? 'bg-white text-indigo-600' : 'bg-amber-500 text-white'
                         }`}
                       >
-                        {item.badge}
+                        {count > 99 ? '99+' : count}
                       </span>
                     )}
-                  </>
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
+                  </span>
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {hasCount && (
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                            isActive ? 'bg-white text-indigo-600' : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {count > 99 ? '99+' : count}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </NavLink>
+          );
+        })}
       </div>
 
       {/* User Section & Logout Button at Bottom */}
