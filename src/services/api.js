@@ -1031,6 +1031,29 @@ export const api = {
               invoiceActual: formatAppDate(row[colMap['actual 3']] || ''),
               billNo: (row[colMap['bill no.']] ?? '').toString().trim(),
               billCopy: (row[colMap['bill copy']] ?? '').toString().trim(),
+              // Sales Form 3 stage
+              salesFormPlanned: formatAppDate(row[colMap['planned 4']] || ''),
+              salesFormActual: formatAppDate(row[colMap['actual 4']] || ''),
+              salesFormStatus: (row[colMap['status4']] ?? '').toString().trim(),
+              // Entry In Bilty stage
+              biltyEntryPlanned: formatAppDate(row[colMap['planned 5']] || ''),
+              biltyEntryActual: formatAppDate(row[colMap['actual 5']] || ''),
+              biltyEntryNo: (row[colMap['bilty no.5']] ?? '').toString().trim(),
+              biltyEntryCopy: (row[colMap['bilty copy']] ?? '').toString().trim(),
+              // Make & Send Test Certificate stage
+              tcPlanned: formatAppDate(row[colMap['planned 6']] || ''),
+              tcActual: formatAppDate(row[colMap['actual 6']] || ''),
+              tcCopy: (row[colMap['tc copy']] ?? '').toString().trim(),
+              // Party Get Report stage
+              reportPlanned: formatAppDate(row[colMap['planned 7']] || ''),
+              reportActual: formatAppDate(row[colMap['actual 7']] || ''),
+              receivedDate: formatAppDate(row[colMap['received date']] || ''),
+              receivedCopyImage: (row[colMap['image of received copy']] ?? '').toString().trim(),
+              grnNumber: (row[colMap['grn number']] ?? '').toString().trim(),
+              // Full Kitting stage
+              kittingPlanned: formatAppDate(row[colMap['planned 8']] || ''),
+              kittingActual: formatAppDate(row[colMap['actual 8']] || ''),
+              kittingStatus: (row[colMap['status8']] ?? '').toString().trim(),
             });
           }
 

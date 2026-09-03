@@ -25,6 +25,7 @@ import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
 import LoadMaterialPage from '../pages/LoadMaterialPage';
 import WeighmentEntryPage from '../pages/WeighmentEntryPage';
 import MakeInvoicePage from '../pages/MakeInvoicePage';
+import SalesForm3Page from '../pages/SalesForm3Page';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -144,6 +145,14 @@ export const navConfig = [
     path: '/make-invoice',
     icon: 'FileText',
     component: MakeInvoicePage,
+    inSidebar: true,
+  },
+  {
+    id: 'sales-form-3',
+    label: 'Sales Form 3',
+    path: '/sales-form-3',
+    icon: 'ClipboardList',
+    component: SalesForm3Page,
     inSidebar: true,
   },
   {
