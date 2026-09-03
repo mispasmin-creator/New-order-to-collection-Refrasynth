@@ -24,6 +24,7 @@ import DispatchPlanningPage from '../pages/DispatchPlanningPage';
 import ArrangeLogisticsPage from '../pages/ArrangeLogisticsPage';
 import LoadMaterialPage from '../pages/LoadMaterialPage';
 import WeighmentEntryPage from '../pages/WeighmentEntryPage';
+import MakeInvoicePage from '../pages/MakeInvoicePage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -135,6 +136,14 @@ export const navConfig = [
     path: '/weighment-entry',
     icon: 'Scale',
     component: WeighmentEntryPage,
+    inSidebar: true,
+  },
+  {
+    id: 'make-invoice',
+    label: 'Make Invoice',
+    path: '/make-invoice',
+    icon: 'FileText',
+    component: MakeInvoicePage,
     inSidebar: true,
   },
   {
