@@ -948,12 +948,14 @@ export const api = {
     return { success: true, message: 'Order deleted successfully' };
   },
 
+  // Arrange Logistics submissions are written to the real 'Billing' sheet tab —
+  // it already carries the Dispatch No./LGST-Sr Number/Transporter columns this needs.
   async getLogisticsEntries() {
     if (!FORCE_MOCK) {
       try {
         const res = await sendToAppsScript({
           action: 'read',
-          sheet: 'Arrange Logistics',
+          sheet: 'Billing',
         });
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5; // Default row 6 (0-indexed 5)
@@ -961,7 +963,7 @@ export const api = {
           for (let r = 0; r < Math.min(res.data.length, 7); r++) {
             const rowArr = res.data[r] || [];
             const rowStr = JSON.stringify(rowArr).toUpperCase();
-            if (rowStr.includes('DELIVERY ORDER') || rowStr.includes('LGST NO') || rowStr.includes('TRANSPORTER NAME')) {
+            if (rowStr.includes('DISPATCH NO') || rowStr.includes('LGST-SR NUMBER') || rowStr.includes('TRANSPORTER NAME')) {
               headerRowIdx = r;
               rowArr.forEach((cell, cIdx) => {
                 const cleanHdr = (cell || '').toString().trim().toLowerCase();
@@ -978,20 +980,24 @@ export const api = {
           for (let i = headerRowIdx + 1; i < res.data.length; i++) {
             const row = res.data[i];
             if (!row || row.length === 0 || !row.some((c) => c !== null && c !== '')) continue;
-            const doNo = (row[colMap['delivery order no.']] ?? row[colMap['do-delivery order no.']] ?? '').toString().trim();
-            const lgstNo = (row[colMap['lgst no']] ?? row[colMap['lgst no.']] ?? '').toString().trim();
-            if (!doNo && !lgstNo) continue;
+            const dispatchNo = (row[colMap['dispatch no.']] ?? '').toString().trim();
+            const lgstNo = (row[colMap['lgst-sr number']] ?? '').toString().trim();
+            const partyPoNumber = (row[colMap['party po number']] ?? '').toString().trim();
+            if (!dispatchNo && !lgstNo) continue;
 
-            const m = lgstNo.match(/LGST-(\d+)/i);
-            if (m) {
-              const num = parseInt(m[1], 10);
-              if (num > maxLgstSeq) maxLgstSeq = num;
+            {
+              const m = lgstNo.match(/LGST-(\d+)/i);
+              if (m) {
+                const num = parseInt(m[1], 10);
+                if (num > maxLgstSeq) maxLgstSeq = num;
+              }
             }
 
             entries.push({
               rowIndex: i + 1,
               timestamp: formatAppDate(row[colMap['timestamp']] || ''),
-              doNumber: doNo,
+              doNumber: (row[colMap['delivery order no']] ?? '').toString().trim(),
+              dispatchNo,
               partyName: (row[colMap['party name']] ?? '').toString().trim(),
               productName: (row[colMap['product name']] ?? '').toString().trim(),
               typeOfTransporting: (row[colMap['type of transporting']] ?? '').toString().trim(),
@@ -999,19 +1005,18 @@ export const api = {
               transporterName: (row[colMap['transporter name']] ?? '').toString().trim(),
               transportRatePerMt: (row[colMap['transport rate @per matric ton  ']] ?? row[colMap['transport rate @per matric ton']] ?? '').toString().trim(),
               fixedAmount: (row[colMap['fixed amount']] ?? '').toString().trim(),
-              partyPoNumber: (row[colMap['party po number']] ?? '').toString().trim(),
+              partyPoNumber,
               partyPoDate: formatAppDate(row[colMap['party po date']] || ''),
               partyPoCopy: (row[colMap['party po copy']] ?? '').toString().trim(),
               rateOfMaterial: (row[colMap['rate of material']] ?? '').toString().trim(),
-              transportRate: (row[colMap['transport rate']] ?? '').toString().trim(),
-              lgstNo: lgstNo,
+              lgstNo,
             });
           }
 
           return { success: true, data: entries, maxLgstSeq };
         }
       } catch (err) {
-        console.warn('Error reading Arrange Logistics entries:', err);
+        console.warn('Error reading Billing/logistics entries:', err);
       }
     }
     return { success: true, data: [], maxLgstSeq: 0 };
@@ -1022,14 +1027,14 @@ export const api = {
       for (const rowObj of rows) {
         const res = await sendToAppsScript({
           action: 'insert',
-          sheetName: 'Arrange Logistics',
+          sheetName: 'Billing',
           rowDataObj: JSON.stringify(rowObj),
         });
         if (!res || !res.success) {
-          return { success: false, error: res?.error || 'Failed to insert row into Arrange Logistics' };
+          return { success: false, error: res?.error || 'Failed to insert row into Billing' };
         }
       }
-      return { success: true, message: `Successfully inserted ${rows.length} rows into Arrange Logistics` };
+      return { success: true, message: `Successfully inserted ${rows.length} rows into Billing` };
     }
     return { success: true, message: 'Inserted into mock' };
   },

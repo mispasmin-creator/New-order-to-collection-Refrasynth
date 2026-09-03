@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import FileUploader from '../components/common/FileUploader';
 import {
   Search,
   RefreshCw,
   Package,
-  ExternalLink,
   CheckCircle2,
   AlertCircle,
   Boxes,
@@ -15,6 +15,22 @@ import {
   Check,
   Eye,
 } from 'lucide-react';
+
+const fmtQty = (n) => {
+  const num = Number(n) || 0;
+  return Number.isInteger(num) ? String(num) : num.toFixed(2);
+};
+
+const emptyTransporter = () => ({
+  name: '',
+  rateType: 'Per MT',
+  rate: '',
+  truckNo: '',
+  vehiclePlateImage: '',
+  driverMobileNo: '',
+  biltyNo: '',
+  actualTruckQty: '',
+});
 
 export default function ArrangeLogisticsPage() {
   const [orders, setOrders]                 = useState([]);
@@ -28,37 +44,35 @@ export default function ArrangeLogisticsPage() {
   // Master Data
   const [masterData, setMasterData]         = useState({});
 
-  // Arrange Logistics Tab Entries from Google Sheets
+  // Dispatch Tab Entries (each is a dispatched product/DO instance)
+  const [dispatchEntries, setDispatchEntries] = useState([]);
+
+  // Billing Tab Entries — Arrange Logistics submissions live here, linked back
+  // to a Dispatch entry via its D Number ("Dispatch No." column in Billing)
   const [logisticsEntries, setLogisticsEntries] = useState([]);
   const [maxLgstSeq, setMaxLgstSeq]             = useState(0);
 
   // Modal State
   const [isModalOpen, setIsModalOpen]       = useState(false);
-  const [activeGroup, setActiveGroup]       = useState([]);
+  const [activeBatch, setActiveBatch]       = useState(null);
   const [submitting, setSubmitting]         = useState(false);
 
   // View Modal State
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [viewGroup, setViewGroup]             = useState([]);
-
-  // Products selection in modal — keyed by DO number so multi-product POs disambiguate
-  const [selectedProducts, setSelectedProducts] = useState({});
+  const [viewBatch, setViewBatch]             = useState(null);
 
   // Transporter options cards (max 10)
-  const [transporters, setTransporters]     = useState([
-    { name: '', rateType: 'Per MT', rate: '' },
-    { name: '', rateType: 'Per MT', rate: '' },
-    { name: '', rateType: 'Per MT', rate: '' },
-  ]);
+  const [transporters, setTransporters]     = useState([emptyTransporter()]);
 
-  // Fetch orders from Google Sheet FMS tab and entries from Arrange Logistics tab
+  // Fetch orders (FMS), dispatch instances (Dispatch), and existing arrangements (Billing)
   const fetchAllData = async (showSync = false) => {
     if (showSync) setSyncing(true);
     else setLoading(true);
     setError('');
     try {
-      const [ordersRes, lgstRes] = await Promise.all([
+      const [ordersRes, dispatchRes, lgstRes] = await Promise.all([
         api.getOrders(),
+        api.getDispatchEntries(),
         api.getLogisticsEntries(),
       ]);
 
@@ -66,6 +80,10 @@ export default function ArrangeLogisticsPage() {
         setOrders(ordersRes.data);
       } else {
         setError(ordersRes?.error || 'Could not fetch orders from Google Sheets.');
+      }
+
+      if (dispatchRes && dispatchRes.success && Array.isArray(dispatchRes.data)) {
+        setDispatchEntries(dispatchRes.data);
       }
 
       if (lgstRes && lgstRes.success && Array.isArray(lgstRes.data)) {
@@ -142,128 +160,124 @@ export default function ArrangeLogisticsPage() {
     return defaultList;
   }, [masterData]);
 
-  // Group existing Arrange Logistics entries by DO Number (case-insensitive)
-  const arrangedLogisticsMap = useMemo(() => {
+  // Quick lookup: DO number (lowercased) → order record, to enrich dispatch entries
+  const orderByDoNumber = useMemo(() => {
     const map = {};
-    logisticsEntries.forEach((entry) => {
-      const doKey = (entry.doNumber || '').trim().toLowerCase();
-      if (doKey) {
-        if (!map[doKey]) map[doKey] = [];
-        map[doKey].push(entry);
-      }
+    orders.forEach((o) => {
+      const key = (o.doNumber || '').trim().toLowerCase();
+      if (key) map[key] = o;
+    });
+    return map;
+  }, [orders]);
+
+  // Existing Billing/logistics rows, grouped by the Dispatch No. (D Number) they cover
+  const arrangedByDNumber = useMemo(() => {
+    const map = {};
+    logisticsEntries.forEach((e) => {
+      const key = (e.dispatchNo || '').trim().toLowerCase();
+      if (!key) return;
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
     });
     return map;
   }, [logisticsEntries]);
 
-  // Base list: ONLY orders passed Stage 3 (Check for Delivery: actual3 exists)
-  const eligibleOrders = useMemo(() => {
-    return orders.filter((o) => Boolean(o.actual3));
-  }, [orders]);
+  // Enrich each Dispatch entry with its order's PO/rate/party details, dropping any
+  // dispatch row whose DO number no longer resolves to a known order
+  const enrichedDispatchEntries = useMemo(() => {
+    return dispatchEntries
+      .map((e) => {
+        const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+        if (!order) return null;
+        return {
+          ...e,
+          partyPoNo: order.partyPoNo || '',
+          partyPoDate: order.partyPoDate || '',
+          partyNames: order.partyNames || e.partyName || '',
+          rateOfMaterial: order.rateOfMaterial || '',
+          uploadSo: order.uploadSo || '',
+          typeOfMeasurement: order.typeOfMeasurement || '',
+        };
+      })
+      .filter(Boolean);
+  }, [dispatchEntries, orderByDoNumber]);
 
-  // Tab & Search filtered orders
-  const filteredOrders = useMemo(() => {
-    return eligibleOrders.filter((order) => {
-      const doKey = (order.doNumber || '').trim().toLowerCase();
-      const isArranged = Boolean(arrangedLogisticsMap[doKey] && arrangedLogisticsMap[doKey].length > 0);
-
-      if (statusTab === 'Pending' && isArranged) return false;
-      if (statusTab === 'History' && !isArranged) return false;
-
-      const q = searchQuery.toLowerCase();
-      if (!q) return true;
-      return (
-        (order.doNumber && order.doNumber.toLowerCase().includes(q)) ||
-        (order.partyPoNo && order.partyPoNo.toLowerCase().includes(q)) ||
-        (order.partyNames && order.partyNames.toLowerCase().includes(q)) ||
-        (order.productName && order.productName.toLowerCase().includes(q)) ||
-        (order.salesPersonName && order.salesPersonName.toLowerCase().includes(q))
-      );
-    });
-  }, [eligibleOrders, arrangedLogisticsMap, statusTab, searchQuery]);
-
-  // Group multi-product submissions (same Party PO No + Date + Party Name) into a
-  // single row so one PO with several products reads — and gets arranged — as one order
-  const groupedOrders = useMemo(() => {
+  // Group dispatch entries into shipment batches: same PO + same transport type +
+  // same dispatch date = one shipment that needs one logistics arrangement.
+  // Two separate "Dispatch PO" submissions (even for the same PO) produce two batches.
+  const batches = useMemo(() => {
     const groups = [];
     const indexByKey = {};
-    filteredOrders.forEach((order) => {
+    enrichedDispatchEntries.forEach((entry) => {
       const key = [
-        String(order.partyPoNo ?? '').trim().toLowerCase(),
-        String(order.partyPoDate ?? '').trim(),
-        String(order.partyNames ?? '').trim().toLowerCase(),
+        String(entry.partyPoNo ?? '').trim().toLowerCase(),
+        String(entry.partyPoDate ?? '').trim(),
+        String(entry.partyNames ?? '').trim().toLowerCase(),
+        String(entry.typeOfTransporting ?? '').trim().toLowerCase(),
+        String(entry.dateOfDispatch ?? '').trim(),
       ].join('|');
-      if (!order.partyPoNo || indexByKey[key] === undefined) {
+      if (indexByKey[key] === undefined) {
         indexByKey[key] = groups.length;
-        groups.push({ key: `${key}-${groups.length}`, orders: [order] });
+        groups.push({ key, entries: [entry] });
       } else {
-        groups[indexByKey[key]].orders.push(order);
+        groups[indexByKey[key]].entries.push(entry);
       }
     });
     return groups;
-  }, [filteredOrders]);
+  }, [enrichedDispatchEntries]);
+
+  const isBatchArranged = (batch) =>
+    batch.entries.every((e) => (arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || []).length > 0);
+
+  // Tab & Search filtered batches
+  const filteredBatches = useMemo(() => {
+    return batches.filter((batch) => {
+      const arranged = isBatchArranged(batch);
+      if (statusTab === 'Pending' && arranged) return false;
+      if (statusTab === 'History' && !arranged) return false;
+
+      const q = searchQuery.toLowerCase();
+      if (!q) return true;
+      return batch.entries.some(
+        (e) =>
+          (e.doNumber && e.doNumber.toLowerCase().includes(q)) ||
+          (e.partyPoNo && e.partyPoNo.toLowerCase().includes(q)) ||
+          (e.partyNames && e.partyNames.toLowerCase().includes(q)) ||
+          (e.productName && e.productName.toLowerCase().includes(q))
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches, arrangedByDNumber, statusTab, searchQuery]);
 
   // Counts
-  const pendingCount = useMemo(() => {
-    return eligibleOrders.filter((o) => {
-      const doKey = (o.doNumber || '').trim().toLowerCase();
-      return !arrangedLogisticsMap[doKey] || arrangedLogisticsMap[doKey].length === 0;
-    }).length;
-  }, [eligibleOrders, arrangedLogisticsMap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pendingCount = useMemo(() => batches.filter((b) => !isBatchArranged(b)).length, [batches, arrangedByDNumber]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const completedCount = useMemo(() => batches.filter((b) => isBatchArranged(b)).length, [batches, arrangedByDNumber]);
 
-  const completedCount = useMemo(() => {
-    return eligibleOrders.filter((o) => {
-      const doKey = (o.doNumber || '').trim().toLowerCase();
-      return Boolean(arrangedLogisticsMap[doKey] && arrangedLogisticsMap[doKey].length > 0);
-    }).length;
-  }, [eligibleOrders, arrangedLogisticsMap]);
-
-  // Open modal — accepts a single order or a group of orders sharing one PO
-  const handleOpenModal = (orderOrGroup) => {
-    const rows = Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup];
-    setActiveGroup(rows);
-    setSelectedProducts(Object.fromEntries(rows.map((o) => [o.doNumber, true])));
-
-    // Pre-fill transporter cards from the first DO's existing entries, if any
-    const firstDoKey = (rows[0].doNumber || '').trim().toLowerCase();
-    const existing = arrangedLogisticsMap[firstDoKey];
-
-    if (existing && existing.length > 0) {
-      setTransporters(
-        existing.map((e) => ({
-          name: e.transporterName || '',
-          rateType: e.typeOfRate || 'Per MT',
-          rate: e.transportRate || e.transportRatePerMt || e.fixedAmount || '',
-        }))
-      );
-    } else {
-      setTransporters([
-        { name: '', rateType: 'Per MT', rate: '' },
-        { name: '', rateType: 'Per MT', rate: '' },
-        { name: '', rateType: 'Per MT', rate: '' },
-      ]);
-    }
+  // Open modal for a batch (one shipment — may cover several products/DOs).
+  // Every not-yet-arranged product in the batch is arranged together, no picking needed.
+  const handleOpenModal = (batch) => {
+    setActiveBatch(batch);
+    setTransporters([emptyTransporter()]);
     setIsModalOpen(true);
   };
 
-  // Open View Modal — accepts a single order or a group of orders sharing one PO
-  const handleOpenView = (orderOrGroup) => {
-    setViewGroup(Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup]);
+  const handleOpenView = (batch) => {
+    setViewBatch(batch);
     setIsViewModalOpen(true);
   };
 
-  // Add transporter card (max 10)
   const handleAddTransporter = () => {
     if (transporters.length >= 10) return;
-    setTransporters((prev) => [...prev, { name: '', rateType: 'Per MT', rate: '' }]);
+    setTransporters((prev) => [...prev, emptyTransporter()]);
   };
 
-  // Remove transporter card
   const handleRemoveTransporter = (index) => {
     if (transporters.length <= 1) return;
     setTransporters((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Update specific transporter field
   const handleTransporterChange = (index, field, value) => {
     setTransporters((prev) => {
       const updated = [...prev];
@@ -272,23 +286,16 @@ export default function ArrangeLogisticsPage() {
     });
   };
 
-  // Select all products toggle
-  const handleSelectAllProducts = () => {
-    if (activeGroup.length === 0) return;
-    setSelectedProducts(Object.fromEntries(activeGroup.map((o) => [o.doNumber, true])));
-  };
-
-  // Submit for Approval: Inserts rows into 'Arrange Logistics' tab with sequential LGST NO —
-  // one row per (selected product × valid transporter), covering every DO in the group at once
+  // Submit: Inserts rows into 'Billing' tab with sequential LGST-Sr Number, one row
+  // per (selected dispatch entry × transporter), linking back via Dispatch No.
   const handleSubmitForApproval = async () => {
-    if (activeGroup.length === 0) return;
+    if (!activeBatch) return;
     setSubmitting(true);
     try {
       const now = new Date();
       const pad = (n) => String(n).padStart(2, '0');
       const istTime = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
-      // Filter non-empty transporters
       const validTransporters = transporters.filter(
         (t) => (t.name && t.name.trim()) || (t.rate && t.rate.toString().trim())
       );
@@ -299,9 +306,12 @@ export default function ArrangeLogisticsPage() {
         return;
       }
 
-      const selectedOrders = activeGroup.filter((o) => selectedProducts[o.doNumber] !== false);
-      if (selectedOrders.length === 0) {
-        alert('Please select at least one product for this plan.');
+      // Arrange every product in this batch that isn't already arranged
+      const selectedList = activeBatch.entries.filter(
+        (e) => (arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || []).length === 0
+      );
+      if (selectedList.length === 0) {
+        alert('All products in this shipment are already arranged.');
         setSubmitting(false);
         return;
       }
@@ -310,10 +320,10 @@ export default function ArrangeLogisticsPage() {
       const newEntriesForState = [];
       const rowsToInsert = [];
 
-      selectedOrders.forEach((order) => {
+      selectedList.forEach((entry) => {
         validTransporters.forEach((t) => {
           currentSeq += 1;
-          const lgstNo = `LGST-${String(currentSeq).padStart(3, '0')}`;
+          const lgstNo = `LGST-${String(currentSeq).padStart(2, '0')}`;
           const rateTypeStr = t.rateType || 'Per MT';
           const isPerMt = rateTypeStr === 'Per MT';
           const isFixed = rateTypeStr === 'Fixed';
@@ -321,29 +331,30 @@ export default function ArrangeLogisticsPage() {
 
           const rowObj = {
             'Timestamp': istTime,
-            'Delivery Order No.': order.doNumber || '',
-            'Party Name': order.partyNames || '',
-            'Product Name': order.productName || '',
-            'Type Of Transporting': order.typeOfTransporting || 'FOR',
+            'Delivery Order No': entry.doNumber || '',
+            'Dispatch No.': entry.dNumber || '',
+            'LGST-Sr Number': lgstNo,
+            'Party Name': entry.partyNames || '',
+            'Product Name': entry.productName || '',
+            'Type Of Transporting': entry.typeOfTransporting || 'FOR',
             'Transporter Name': t.name || '',
+            'Truck No.': t.truckNo || '',
+            'Vehicle No. Plate Image': t.vehiclePlateImage || '',
+            'Driver Mobile No.': t.driverMobileNo || '',
+            'Bilty No.': t.biltyNo || '',
+            'Actual Truck Qty': t.actualTruckQty || '',
             'Type Of Rate': rateTypeStr,
             'Transport Rate @Per Matric Ton  ': isPerMt ? rateVal : '',
             'Transport Rate @Per Matric Ton': isPerMt ? rateVal : '',
             'Fixed Amount': isFixed ? rateVal : '',
-            'Party PO Number': order.partyPoNo || '',
-            'Party PO Date': api.formatDate(order.partyPoDate) || '',
-            'Party PO Copy': order.uploadSo || '',
-            'Rate Of Material': order.rateOfMaterial || '',
-            'TRANSPORT RATE': rateVal,
-            'LGST NO': lgstNo,
           };
 
           newEntriesForState.push({
             ...rowObj,
-            doNumber: order.doNumber,
-            lgstNo: lgstNo,
+            doNumber: entry.doNumber,
+            dispatchNo: entry.dNumber,
+            lgstNo,
             transporterName: t.name,
-            transportRate: rateVal,
             typeOfRate: rateTypeStr,
           });
 
@@ -351,28 +362,22 @@ export default function ArrangeLogisticsPage() {
         });
       });
 
-      // Insert all rows into Google Sheet 'Arrange Logistics' tab
       const res = await api.insertLogisticsRows(rowsToInsert);
 
       if (res && res.success) {
-        const doNumbers = selectedOrders.map((o) => o.doNumber);
-        const assignedLgst = rowsToInsert.map((r) => r['LGST NO']).join(', ');
-        notifySuccess(
-          doNumbers.length > 1
-            ? `Logistics plan for ${doNumbers.length} orders (${doNumbers.join(', ')}) saved (${rowsToInsert.length} rows inserted: ${assignedLgst}) and moved to History!`
-            : `Logistics plan for Order ${doNumbers[0]} saved (${rowsToInsert.length} rows inserted into Arrange Logistics: ${assignedLgst}) and moved to History!`
-        );
+        const dNumbers = selectedList.map((e) => e.dNumber).join(', ');
+        const assignedLgst = rowsToInsert.map((r) => r['LGST-Sr Number']).join(', ');
+        notifySuccess(`Logistics arranged for ${dNumbers} (${rowsToInsert.length} record(s): ${assignedLgst})!`);
 
-        // Update local sequence counter and entries map
         setMaxLgstSeq(currentSeq);
         setLogisticsEntries((prev) => [...prev, ...newEntriesForState]);
 
         setIsModalOpen(false);
       } else {
-        alert(res?.error || 'Failed to insert into Arrange Logistics sheet');
+        alert(res?.error || 'Failed to insert into Billing sheet');
       }
     } catch (err) {
-      alert(err.message || 'Error updating order');
+      alert(err.message || 'Error saving logistics arrangement');
     } finally {
       setSubmitting(false);
     }
@@ -391,7 +396,7 @@ export default function ArrangeLogisticsPage() {
             <div>
               <h1 className="text-lg font-bold text-slate-800">Arrange Logistics</h1>
               <p className="text-xs text-slate-500">
-                {pendingCount} pending logistics arrangement • Orders passed Delivery Check
+                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • One row per dispatched batch
               </p>
             </div>
           </div>
@@ -427,7 +432,7 @@ export default function ArrangeLogisticsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search pending orders..."
+              placeholder="Search pending shipments..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
@@ -471,123 +476,116 @@ export default function ArrangeLogisticsPage() {
                 <th className="sticky left-0 bg-slate-100 z-30 px-3.5 py-3 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
                   Action
                 </th>
-                <th className="px-3.5 py-3 whitespace-nowrap">Timestamp</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">DO-Delivery Order No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">PARTY PO NO</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Party Names</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
-                <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty Dispatched</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Type Of Transporting</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Date Of Dispatch</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-20 text-center text-slate-400">
+                  <td colSpan="9" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
-                      Loading orders from Google Sheets...
+                      Loading dispatched shipments from Google Sheets...
                     </p>
                   </td>
                 </tr>
-              ) : groupedOrders.length === 0 ? (
+              ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-16 text-center text-slate-400">
+                  <td colSpan="9" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
-                      No orders in this stage
+                      No shipments in this stage
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
                       {statusTab === 'Pending'
-                        ? 'Orders completed in "Check for Delivery" will appear here.'
-                        : 'No orders match your filter.'}
+                        ? 'Batches dispatched from "Dispatch Planning" will appear here.'
+                        : 'No shipments match your filter.'}
                     </p>
                   </td>
                 </tr>
               ) : (
-                groupedOrders.map((group) => {
-                  const orderRows = group.orders;
-                  const order = orderRows[0];
-                  const isGroup = orderRows.length > 1;
-                  const doNumbers = orderRows.map((o) => o.doNumber).filter(Boolean).join(', ');
-                  const productNames = orderRows.map((o) => o.productName).filter(Boolean);
-                  const sameMeasurement = orderRows.every((o) => o.typeOfMeasurement === order.typeOfMeasurement);
-                  const totalQuantity = orderRows.reduce((sum, o) => sum + (Number(o.quantity) || 0), 0);
-                  const totalPoValueSum = orderRows.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
-                  const arrangedList = orderRows.flatMap((o) => arrangedLogisticsMap[(o.doNumber || '').trim().toLowerCase()] || []);
-                  const isArranged = orderRows.every((o) => {
-                    const list = arrangedLogisticsMap[(o.doNumber || '').trim().toLowerCase()];
-                    return list && list.length > 0;
-                  });
+                filteredBatches.map((batch) => {
+                  const primary = batch.entries[0];
+                  const isMulti = batch.entries.length > 1;
+                  const doNumbers = batch.entries.map((e) => e.doNumber).filter(Boolean).join(', ');
+                  const productNames = batch.entries.map((e) => e.productName).filter(Boolean);
+                  const totalQty = batch.entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
+                  const arranged = isBatchArranged(batch);
+                  const lgstList = batch.entries.flatMap(
+                    (e) => arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || []
+                  );
+                  const uniqueLgst = [...new Set(lgstList.map((e) => e.lgstNo).filter(Boolean))];
 
                   return (
-                    <tr
-                      key={group.key}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
+                    <tr key={batch.key} className="hover:bg-slate-50/80 transition-colors">
                       {/* Sticky Action Button */}
                       <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
-                            onClick={() => handleOpenView(orderRows)}
-                            title={isGroup ? `View all ${orderRows.length} products` : 'View Full Details'}
+                            onClick={() => handleOpenView(batch)}
+                            title={isMulti ? `View all ${batch.entries.length} products` : 'View Full Details'}
                             className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative"
                           >
                             <Eye className="w-4 h-4" />
-                            {isGroup && (
+                            {isMulti && (
                               <span className="absolute -top-1 -right-1 flex items-center justify-center w-3.5 h-3.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full">
-                                {orderRows.length}
+                                {batch.entries.length}
                               </span>
                             )}
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleOpenModal(orderRows)}
+                            onClick={() => handleOpenModal(batch)}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all ${
-                              isArranged
+                              arranged
                                 ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                 : 'bg-amber-500 hover:bg-amber-600 text-white'
                             }`}
                           >
                             <Boxes className="w-3.5 h-3.5" />
-                            {isArranged ? 'Edit Logistics' : 'Arrange Logistics'}
+                            {arranged ? 'Edit Logistics' : 'Arrange Logistics'}
                           </button>
                         </div>
                       </td>
 
-                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-400 text-[11px] font-mono">
-                        {api.formatDate(order.timestamp) || '—'}
-                      </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-indigo-600" title={isGroup ? doNumbers : undefined}>
-                        {isGroup ? `${order.doNumber} +${orderRows.length - 1}` : (order.doNumber || '—')}
+                      <td className="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-indigo-600" title={isMulti ? doNumbers : undefined}>
+                        {isMulti ? `${primary.doNumber} +${batch.entries.length - 1}` : (primary.doNumber || '—')}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
-                        {order.partyPoNo || '—'}
+                        {primary.partyPoNo || '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
-                        {order.partyNames || '—'}
+                        {primary.partyNames || '—'}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700" title={isGroup ? productNames.join(', ') : undefined}>
-                        {isGroup ? `${orderRows.length} products` : (order.productName || '—')}
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700" title={isMulti ? productNames.join(', ') : undefined}>
+                        {isMulti ? `${batch.entries.length} products` : (primary.productName || '—')}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-800">
-                        {totalQuantity ? `${totalQuantity.toLocaleString('en-IN')}${isGroup && sameMeasurement && order.typeOfMeasurement ? ` ${order.typeOfMeasurement}` : ''}` : '—'}
+                        {fmtQty(totalQty)}
                       </td>
-                      <td className="px-3.5 py-3 whitespace-nowrap text-right font-bold text-emerald-700">
-                        {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.typeOfTransporting || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {api.formatDate(primary.dateOfDispatch) || '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap">
-                        {arrangedList.length > 0 ? (
+                        {uniqueLgst.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
-                            {arrangedList.map((e) => (
+                            {uniqueLgst.map((lgstNo) => (
                               <span
-                                key={e.lgstNo}
+                                key={lgstNo}
                                 className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-semibold"
-                                title={`${e.transporterName || 'Transporter'}: ₹${e.transportRate || ''}`}
                               >
-                                {e.lgstNo}
+                                {lgstNo}
                               </span>
                             ))}
                           </div>
@@ -605,9 +603,9 @@ export default function ArrangeLogisticsPage() {
       </div>
 
       {/* ── Arrange Logistics Custom Modal ─────────────────────────────── */}
-      {isModalOpen && activeGroup.length > 0 && (() => {
-        const activePrimary = activeGroup[0];
-        const activeIsGroup = activeGroup.length > 1;
+      {isModalOpen && activeBatch && (() => {
+        const primary = activeBatch.entries[0];
+        const isMulti = activeBatch.entries.length > 1;
 
         return (
         <Modal
@@ -619,83 +617,59 @@ export default function ArrangeLogisticsPage() {
                 <Truck className="w-4 h-4" />
               </div>
               <span className="font-bold text-slate-800 text-base">
-                Arrange Logistics{activeIsGroup ? ` — ${activeGroup.length} Products` : ''}
+                Arrange Logistics{isMulti ? ` — ${activeBatch.entries.length} Products` : ''}
               </span>
             </div>
           }
           maxWidth="max-w-4xl"
         >
           <div className="space-y-5">
-            {activeIsGroup && (
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-medium">
-                <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                The transporter options below will be applied to every selected product's DO: {activeGroup.map((o) => o.doNumber).join(', ')}
-              </div>
-            )}
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-medium">
+              <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+              This shipment was dispatched via <strong className="mx-1">{primary.typeOfTransporting || '—'}</strong>
+              on <strong className="mx-1">{api.formatDate(primary.dateOfDispatch) || '—'}</strong> — transporter options below apply to this shipment only.
+            </div>
 
-            {/* 1. SELECT PRODUCTS FOR THIS PLAN */}
+            {/* 1. Products covered — all of them, arranged together */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  SELECT PRODUCTS FOR THIS PLAN
-                </p>
-                <button
-                  type="button"
-                  onClick={handleSelectAllProducts}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider"
-                >
-                  SELECT ALL
-                </button>
-              </div>
-
-              {/* Product Cards */}
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                Products In This Shipment ({activeBatch.entries.length})
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {activeGroup.map((o) => (
-                  <div
-                    key={o.doNumber}
-                    onClick={() =>
-                      setSelectedProducts((prev) => ({
-                        ...prev,
-                        [o.doNumber]: !(prev[o.doNumber] !== false),
-                      }))
-                    }
-                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 flex items-center gap-3.5 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(selectedProducts[o.doNumber] !== false)}
-                      onChange={() => {}}
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
+                {activeBatch.entries.map((e) => {
+                  const already = (arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || []);
+                  return (
+                    <div
+                      key={e.dNumber}
+                      className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50"
+                    >
                       <p className="text-xs font-semibold text-slate-800">
-                        {o.productName || 'Product'}
-                        {activeIsGroup && <span className="ml-1.5 font-mono font-normal text-indigo-600">({o.doNumber})</span>}
+                        {e.productName || 'Product'}
+                        <span className="ml-1.5 font-mono font-normal text-indigo-600">
+                          ({e.doNumber} / {e.dNumber})
+                        </span>
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        {o.quantity ? `${Number(o.quantity).toLocaleString('en-IN')} ${o.typeOfMeasurement || 'MT'}` : '—'}
+                        {fmtQty(e.qtyToBeDispatched)} {e.typeOfMeasurement || 'MT'}
+                        {already.length > 0 && (
+                          <span className="ml-1.5 text-emerald-600 font-semibold">
+                            — Already: {already.map((a) => a.lgstNo).join(', ')}
+                          </span>
+                        )}
                       </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* 2. Transporter Type Bar */}
-            <div className="py-2.5 px-3 border-y border-slate-200 flex items-center justify-between bg-slate-50/30">
-              <span className="text-xs font-bold text-slate-600">Type Of Transporting</span>
-              <span className="text-xs font-bold text-slate-800 tracking-wider">
-                {(activePrimary.typeOfTransporting || 'FOR').toUpperCase()}
-              </span>
-            </div>
-
-            {/* 3. Transporter Options Header & Add Button */}
+            {/* 2. Transporter Options Header & Add Button */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="text-xs font-bold text-slate-800">Transporter Options</h3>
                   <p className="text-[11px] text-slate-400">
-                    Provide options for the entire PO (max 10).
+                    Provide options for this shipment (max 10).
                   </p>
                 </div>
                 <button
@@ -710,7 +684,7 @@ export default function ArrangeLogisticsPage() {
               </div>
 
               {/* Transporter Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                 {transporters.map((t, idx) => (
                   <div
                     key={idx}
@@ -784,12 +758,75 @@ export default function ArrangeLogisticsPage() {
                         />
                       </div>
                     </div>
+
+                    {/* Truck / Driver / Bilty details */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Truck No.
+                        </label>
+                        <input
+                          type="text"
+                          value={t.truckNo}
+                          onChange={(e) => handleTransporterChange(idx, 'truckNo', e.target.value)}
+                          placeholder="CG04AB1234"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Driver Mobile No.
+                        </label>
+                        <input
+                          type="tel"
+                          value={t.driverMobileNo}
+                          onChange={(e) => handleTransporterChange(idx, 'driverMobileNo', e.target.value)}
+                          placeholder="98765 43210"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Bilty No.
+                        </label>
+                        <input
+                          type="text"
+                          value={t.biltyNo}
+                          onChange={(e) => handleTransporterChange(idx, 'biltyNo', e.target.value)}
+                          placeholder="Bilty number"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                          Actual Truck Qty
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={t.actualTruckQty}
+                          onChange={(e) => handleTransporterChange(idx, 'actualTruckQty', e.target.value)}
+                          placeholder="0.00"
+                          className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+                    </div>
+
+                    <FileUploader
+                      label="Vehicle No. Plate Image"
+                      value={t.vehiclePlateImage}
+                      onChange={(url) => handleTransporterChange(idx, 'vehiclePlateImage', url)}
+                      accept="image/*"
+                    />
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* 4. Footer Buttons */}
+            {/* 3. Footer Buttons */}
             <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
@@ -814,76 +851,60 @@ export default function ArrangeLogisticsPage() {
       })()}
 
       {/* ── View Details Modal (Read-Only) ──────────────────────────────── */}
-      {isViewModalOpen && viewGroup.length > 0 && (() => {
-        const viewPrimary = viewGroup[0];
-        const viewIsGroup = viewGroup.length > 1;
-        const viewTotalPoValueSum = viewGroup.reduce((sum, o) => sum + (Number(o.totalPoValue) || 0), 0);
+      {isViewModalOpen && viewBatch && (() => {
+        const primary = viewBatch.entries[0];
+        const isMulti = viewBatch.entries.length > 1;
 
         return (
         <Modal
           isOpen={isViewModalOpen}
           onClose={() => setIsViewModalOpen(false)}
-          title={`Order Details — ${viewPrimary.doNumber || ''}${viewIsGroup ? ` + ${viewGroup.length - 1} more` : ''}`}
+          title={`Shipment Details — ${primary.doNumber || ''}${isMulti ? ` + ${viewBatch.entries.length - 1} more` : ''}`}
           maxWidth="max-w-2xl"
         >
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs">
               <div>
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">DO Number{viewIsGroup ? 's' : ''}</p>
-                <p className="font-bold text-indigo-600 font-mono text-sm">{viewGroup.map((o) => o.doNumber).join(', ') || '—'}</p>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">DO Number{isMulti ? 's' : ''}</p>
+                <p className="font-bold text-indigo-600 font-mono text-sm">{viewBatch.entries.map((e) => e.doNumber).join(', ') || '—'}</p>
               </div>
               <div>
                 <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Party PO No.</p>
-                <p className="font-semibold text-slate-800">{viewPrimary.partyPoNo || '—'}</p>
+                <p className="font-semibold text-slate-800">{primary.partyPoNo || '—'}</p>
               </div>
               <div>
                 <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Party Name</p>
-                <p className="font-semibold text-slate-800">{viewPrimary.partyNames || '—'}</p>
-              </div>
-              <div>
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Expected Delivery Date</p>
-                <p className="text-indigo-600 font-medium">{api.formatDate(viewPrimary.expectedDeliveryDate) || '—'}</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-1">
-                  Product{viewIsGroup ? `s (${viewGroup.length})` : ''}
-                </p>
-                <div className="space-y-1">
-                  {viewGroup.map((o, idx) => (
-                    <p key={o.rowIndex ?? idx} className="text-slate-700">
-                      {viewIsGroup && <span className="font-mono font-bold text-indigo-600 mr-1.5">{o.doNumber}</span>}
-                      {o.productName || '—'} — {o.quantity ? Number(o.quantity).toLocaleString('en-IN') : '—'}
-                      {' @ '}{o.rateOfMaterial ? `₹${Number(o.rateOfMaterial).toLocaleString('en-IN')}` : '—'}
-                    </p>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Total PO Value{viewIsGroup ? ' (All Products)' : ''}</p>
-                <p className="font-bold text-emerald-700">{viewTotalPoValueSum ? `₹${viewTotalPoValueSum.toLocaleString('en-IN')}` : '—'}</p>
+                <p className="font-semibold text-slate-800">{primary.partyNames || '—'}</p>
               </div>
               <div>
                 <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Type Of Transporting</p>
-                <p className="text-slate-700">{viewPrimary.typeOfTransporting || '—'}</p>
+                <p className="text-slate-700">{primary.typeOfTransporting || '—'}</p>
               </div>
               <div>
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">In Stock Or Not</p>
-                <p className="text-slate-700">{viewPrimary.inStockOrNot || '—'}</p>
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Date Of Dispatch</p>
+                <p className="text-slate-700">{api.formatDate(primary.dateOfDispatch) || '—'}</p>
               </div>
               <div className="col-span-2">
-                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Upload SO</p>
-                {viewPrimary.uploadSo && viewPrimary.uploadSo.startsWith('http') ? (
-                  <a
-                    href={viewPrimary.uploadSo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
-                  >
-                    Open SO <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : (
-                  <p className="text-slate-700">—</p>
-                )}
+                <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-1">
+                  Product{isMulti ? `s (${viewBatch.entries.length})` : ''}
+                </p>
+                <div className="space-y-1">
+                  {viewBatch.entries.map((e, idx) => {
+                    const already = arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || [];
+                    return (
+                      <p key={e.dNumber ?? idx} className="text-slate-700">
+                        <span className="font-mono font-bold text-indigo-600 mr-1.5">{e.doNumber}</span>
+                        {e.productName || '—'} — {fmtQty(e.qtyToBeDispatched)}
+                        {' ('}{e.dNumber}{')'}
+                        {already.length > 0 && (
+                          <span className="ml-1.5 text-emerald-600 font-semibold">
+                            {already.map((a) => a.lgstNo).join(', ')}
+                          </span>
+                        )}
+                      </p>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
