@@ -14,6 +14,7 @@ import {
   FileText,
   Send,
   Check,
+  ChevronRight,
 } from 'lucide-react';
 
 const fmtQty = (n) => {
@@ -405,6 +406,31 @@ export default function MaterialReturnPage() {
               Request Material Return
             </button>
           </div>
+        </div>
+
+        {/* 4-stage workflow legend — always visible, full sheet-matching names */}
+        <div className="flex items-stretch gap-0 bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto">
+          {STAGE_STEPS.map((step, idx) => {
+            const Icon = STAGE_META[step.key].icon;
+            return (
+              <React.Fragment key={step.key}>
+                {idx > 0 && (
+                  <div className="flex items-center px-1 text-slate-300 shrink-0">
+                    <ChevronRight className="w-4 h-4" />
+                  </div>
+                )}
+                <div className="flex items-center gap-2 px-3.5 py-2.5 min-w-0">
+                  <div className="w-7 h-7 shrink-0 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center">
+                    <Icon className="w-3.5 h-3.5 text-teal-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Step {step.key}</p>
+                    <p className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">{step.full}</p>
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
         </div>
 
         {successNotice && (
