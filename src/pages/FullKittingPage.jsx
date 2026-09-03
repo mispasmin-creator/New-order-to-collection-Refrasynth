@@ -32,7 +32,20 @@ export default function FullKittingPage() {
   const [isModalOpen, setIsModalOpen]       = useState(false);
   const [activeBatch, setActiveBatch]       = useState(null);
   const [submitting, setSubmitting]         = useState(false);
-  const [status8, setStatus8]               = useState('');
+  const [kittingChoice, setKittingChoice]   = useState(''); // '' | 'Yes' | 'No'
+
+  // "Yes" form fields — prefilled from the transporter details already captured
+  // during Arrange Logistics; Transport Amount is the only genuinely new field.
+  const [transporterName, setTransporterName]         = useState('');
+  const [truckNo, setTruckNo]                         = useState('');
+  const [driverMobileNo, setDriverMobileNo]           = useState('');
+  const [biltyNo, setBiltyNo]                         = useState('');
+  const [actualTruckQty, setActualTruckQty]           = useState('');
+  const [typeOfRate, setTypeOfRate]                   = useState('');
+  const [transportRatePerMt, setTransportRatePerMt]   = useState('');
+  const [fixedAmount, setFixedAmount]                 = useState('');
+  const [vehiclePlateImage, setVehiclePlateImage]     = useState('');
+  const [transportAmount, setTransportAmount]         = useState('');
 
   // View Modal State
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -164,7 +177,18 @@ export default function FullKittingPage() {
 
   const handleOpenModal = (batch) => {
     setActiveBatch(batch);
-    setStatus8('');
+    setKittingChoice('');
+    const primary = batch.entries[0];
+    setTransporterName(primary.transporterName || '');
+    setTruckNo(primary.truckNo || '');
+    setDriverMobileNo(primary.driverMobileNo || '');
+    setBiltyNo(primary.biltyNo || '');
+    setActualTruckQty(primary.actualTruckQty || '');
+    setTypeOfRate(primary.typeOfRate || '');
+    setTransportRatePerMt(primary.transportRatePerMt || '');
+    setFixedAmount(primary.fixedAmount || '');
+    setVehiclePlateImage(primary.vehiclePlateImage || '');
+    setTransportAmount('');
     setIsModalOpen(true);
   };
 
@@ -174,7 +198,11 @@ export default function FullKittingPage() {
   };
 
   const handleSubmit = async () => {
-    if (!activeBatch) return;
+    if (!activeBatch || !kittingChoice) return;
+    if (kittingChoice === 'Yes' && !transportAmount) {
+      alert('Please enter the Transport Amount.');
+      return;
+    }
     setSubmitting(true);
     try {
       const now = new Date();
@@ -188,9 +216,38 @@ export default function FullKittingPage() {
         return;
       }
 
+      // "Yes" also writes one row per product into the 'Full Kitting' sheet,
+      // carrying forward the transporter details already captured earlier.
+      if (kittingChoice === 'Yes') {
+        const kittingRows = pending.map((e) => ({
+          'Timestamp': istTime,
+          'Delivery Order No': e.doNumber || '',
+          'LGST-Sr Number': e.lgstNo || '',
+          'Party Name': e.partyNames || e.partyName || '',
+          'Type Of Transporting': e.typeOfTransporting || '',
+          'Transporter Name': transporterName || '',
+          'Truck No.': truckNo || '',
+          'Vehicle No. Plate Image': vehiclePlateImage || '',
+          'Driver Mobile No.': driverMobileNo || '',
+          'Bilty No.': biltyNo || '',
+          'Actual Truck Qty': actualTruckQty || '',
+          'Type Of Rate': typeOfRate || '',
+          'Transport Rate @Per Matric Ton  ': transportRatePerMt || '',
+          'Fixed Amount': fixedAmount || '',
+          'Transport Amount': transportAmount || '',
+        }));
+
+        const kittingRes = await api.insertFullKittingRows(kittingRows);
+        if (!kittingRes || !kittingRes.success) {
+          alert(kittingRes?.error || 'Failed to insert into Full Kitting sheet');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const updatePayload = {
         'Actual 8': istTime,
-        'Status8': status8 || '',
+        'Status8': kittingChoice,
       };
 
       const results = await Promise.all(
@@ -205,7 +262,7 @@ export default function FullKittingPage() {
         setBillingEntries((prev) =>
           prev.map((e) =>
             pending.some((p) => p.rowIndex === e.rowIndex)
-              ? { ...e, kittingActual: istTime, kittingStatus: status8 }
+              ? { ...e, kittingActual: istTime, kittingStatus: kittingChoice }
               : e
           )
         );
@@ -458,7 +515,7 @@ export default function FullKittingPage() {
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                 Products In This Shipment ({activeBatch.entries.length})
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-3">
                 {activeBatch.entries.map((e, idx) => (
                   <div key={e.rowIndex ?? idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50">
                     <p className="text-xs font-semibold text-slate-800">
@@ -466,13 +523,56 @@ export default function FullKittingPage() {
                       <span className="ml-1.5 font-mono font-normal text-indigo-600">
                         ({e.doNumber} / {e.lgstNo})
                       </span>
-                    </p>
-                    <p className="text-[11px] text-slate-400">
-                      {fmtQty(e.qtyToBeDispatched)} {e.typeOfMeasurement || 'MT'}
                       {e.kittingActual && (
-                        <span className="ml-1.5 text-emerald-600 font-semibold">— Already done</span>
+                        <span className="ml-1.5 text-emerald-600 font-semibold text-[11px]">— Already done</span>
                       )}
                     </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 mt-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Type Of Transporting</span>
+                        <span className="text-slate-700">{e.typeOfTransporting || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Transporter Name</span>
+                        <span className="text-slate-700">{e.transporterName || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Truck No.</span>
+                        <span className="text-slate-700">{e.truckNo || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Vehicle No. Plate Image</span>
+                        {e.vehiclePlateImage ? (
+                          <a href={e.vehiclePlateImage} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : (
+                          <span className="text-slate-700">—</span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Driver Mobile No.</span>
+                        <span className="text-slate-700">{e.driverMobileNo || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Bilty No.</span>
+                        <span className="text-slate-700">{e.biltyNo || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Actual Truck Qty</span>
+                        <span className="text-slate-700">{e.actualTruckQty || fmtQty(e.qtyToBeDispatched)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Type Of Rate</span>
+                        <span className="text-slate-700">{e.typeOfRate || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Transport Rate @Per Matric Ton</span>
+                        <span className="text-slate-700">{e.transportRatePerMt || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 uppercase tracking-wider text-[9px] font-semibold block">Fixed Amount</span>
+                        <span className="text-slate-700">{e.fixedAmount || '—'}</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -480,16 +580,71 @@ export default function FullKittingPage() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Status8
+                Status <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
-                value={status8}
-                onChange={(e) => setStatus8(e.target.value)}
-                placeholder="Enter status..."
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
+              <select
+                value={kittingChoice}
+                onChange={(e) => setKittingChoice(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+              >
+                <option value="">Select...</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
             </div>
+
+            {kittingChoice === 'Yes' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 bg-slate-50 rounded-xl p-4 border border-slate-200 text-xs">
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Transporter</p>
+                    <p className="font-semibold text-slate-800">{transporterName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Truck No.</p>
+                    <p className="font-semibold text-slate-800">{truckNo || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Driver Mobile No.</p>
+                    <p className="text-slate-700">{driverMobileNo || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Bilty No.</p>
+                    <p className="text-slate-700">{biltyNo || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Truck Qty</p>
+                    <p className="text-slate-700">{actualTruckQty || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Transporter Rate</p>
+                    <p className="text-slate-700">
+                      {typeOfRate || '—'}{(transportRatePerMt || fixedAmount) ? ` — ₹${transportRatePerMt || fixedAmount}` : ''}
+                    </p>
+                  </div>
+                  {vehiclePlateImage && (
+                    <div className="col-span-2">
+                      <p className="text-slate-400 uppercase tracking-wider text-[10px] font-semibold mb-0.5">Bilty Image / Copy</p>
+                      <a href={vehiclePlateImage} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">Open Bilty Copy in New Tab</a>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Total Transporter Amount <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={transportAmount}
+                    onChange={(e) => setTransportAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
@@ -497,15 +652,15 @@ export default function FullKittingPage() {
                 onClick={() => setIsModalOpen(false)}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg"
               >
-                Close
+                Cancel
               </button>
               <button
                 type="button"
-                disabled={submitting}
+                disabled={submitting || !kittingChoice || (kittingChoice === 'Yes' && !transportAmount)}
                 onClick={handleSubmit}
                 className="px-5 py-2 text-xs font-semibold text-white bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {submitting ? 'Saving...' : 'Save'}
+                {submitting ? 'Saving...' : kittingChoice === 'Yes' ? 'Submit & Send to TC' : 'Submit Status'}
               </button>
             </div>
           </div>
