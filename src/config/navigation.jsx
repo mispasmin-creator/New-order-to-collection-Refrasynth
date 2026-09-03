@@ -14,6 +14,10 @@ import {
   Boxes,
   ClipboardList,
   Scale,
+  FileSpreadsheet,
+  BadgeCheck,
+  Inbox,
+  PackageCheck,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -26,6 +30,10 @@ import LoadMaterialPage from '../pages/LoadMaterialPage';
 import WeighmentEntryPage from '../pages/WeighmentEntryPage';
 import MakeInvoicePage from '../pages/MakeInvoicePage';
 import SalesForm3Page from '../pages/SalesForm3Page';
+import EntryInBiltyPage from '../pages/EntryInBiltyPage';
+import MakeSendTestCertificatePage from '../pages/MakeSendTestCertificatePage';
+import PartyGetReportPage from '../pages/PartyGetReportPage';
+import FullKittingPage from '../pages/FullKittingPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -48,6 +56,10 @@ export const iconMap = {
   Settings,
   HelpCircle,
   Scale,
+  FileSpreadsheet,
+  BadgeCheck,
+  Inbox,
+  PackageCheck,
 };
 
 /**
@@ -153,6 +165,38 @@ export const navConfig = [
     path: '/sales-form-3',
     icon: 'ClipboardList',
     component: SalesForm3Page,
+    inSidebar: true,
+  },
+  {
+    id: 'entry-in-bilty',
+    label: 'Entry In Bilty',
+    path: '/entry-in-bilty',
+    icon: 'FileSpreadsheet',
+    component: EntryInBiltyPage,
+    inSidebar: true,
+  },
+  {
+    id: 'make-send-test-certificate',
+    label: 'Send Test Certificate',
+    path: '/make-send-test-certificate',
+    icon: 'BadgeCheck',
+    component: MakeSendTestCertificatePage,
+    inSidebar: true,
+  },
+  {
+    id: 'party-get-report',
+    label: 'Party Get Report',
+    path: '/party-get-report',
+    icon: 'Inbox',
+    component: PartyGetReportPage,
+    inSidebar: true,
+  },
+  {
+    id: 'full-kitting',
+    label: 'Full Kitting',
+    path: '/full-kitting',
+    icon: 'PackageCheck',
+    component: FullKittingPage,
     inSidebar: true,
   },
   {
