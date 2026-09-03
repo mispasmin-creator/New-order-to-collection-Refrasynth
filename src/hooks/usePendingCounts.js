@@ -35,17 +35,19 @@ export default function usePendingCounts() {
 
   const refresh = useCallback(async () => {
     try {
-      const [ordersRes, dispatchRes, billingRes, orderCancelRes] = await Promise.all([
+      const [ordersRes, dispatchRes, billingRes, orderCancelRes, materialReturnRes] = await Promise.all([
         api.getOrders(),
         api.getDispatchEntries(),
         api.getLogisticsEntries(),
         api.getOrderCancelEntries(),
+        api.getMaterialReturnEntries(),
       ]);
 
       const orders = (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) ? ordersRes.data : [];
       const dispatchEntries = (dispatchRes && dispatchRes.success && Array.isArray(dispatchRes.data)) ? dispatchRes.data : [];
       const billingEntries = (billingRes && billingRes.success && Array.isArray(billingRes.data)) ? billingRes.data : [];
       const orderCancelEntries = (orderCancelRes && orderCancelRes.success && Array.isArray(orderCancelRes.data)) ? orderCancelRes.data : [];
+      const materialReturnEntries = (materialReturnRes && materialReturnRes.success && Array.isArray(materialReturnRes.data)) ? materialReturnRes.data : [];
 
       const orderByDoNumber = {};
       orders.forEach((o) => {
@@ -149,6 +151,7 @@ export default function usePendingCounts() {
         'party-get-report': countPending(stageBatches.partyGetReport, 'reportActual'),
         'full-kitting': countPending(stageBatches.fullKitting, 'kittingActual'),
         'order-cancel': orderCancelEntries.filter((e) => !e.actual && !e.status).length,
+        'material-return': materialReturnEntries.filter((e) => !e.actual4).length,
       });
       setLoaded(true);
     } catch (err) {

@@ -19,6 +19,7 @@ import {
   Inbox,
   PackageCheck,
   Ban,
+  RotateCcw,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -36,6 +37,7 @@ import MakeSendTestCertificatePage from '../pages/MakeSendTestCertificatePage';
 import PartyGetReportPage from '../pages/PartyGetReportPage';
 import FullKittingPage from '../pages/FullKittingPage';
 import OrderCancelPage from '../pages/OrderCancelPage';
+import MaterialReturnPage from '../pages/MaterialReturnPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 
 /**
@@ -63,6 +65,7 @@ export const iconMap = {
   Inbox,
   PackageCheck,
   Ban,
+  RotateCcw,
 };
 
 /**
@@ -208,6 +211,14 @@ export const navConfig = [
     path: '/order-cancel',
     icon: 'Ban',
     component: OrderCancelPage,
+    inSidebar: true,
+  },
+  {
+    id: 'material-return',
+    label: 'Material Return',
+    path: '/material-return',
+    icon: 'RotateCcw',
+    component: MaterialReturnPage,
     inSidebar: true,
   },
   {

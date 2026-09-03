@@ -1361,5 +1361,130 @@ export const api = {
     return { success: true, message: 'Updated in mock' };
   },
 
+  // Material Return requests are written to a dedicated 'Material Return' sheet
+  // tab — the requester fills Return details, then 4 sequential stages (Arrange
+  // Logistics, Received From Party, Issue Note, Send To Party) each fill their
+  // own Actual1-4/Status4 columns (Planned/Time Delay are sheet formulas).
+  async getMaterialReturnEntries() {
+    if (!FORCE_MOCK) {
+      try {
+        const res = await sendToAppsScript({
+          action: 'read',
+          sheet: 'Material Return',
+        });
+        if (res && res.success && Array.isArray(res.data)) {
+          let headerRowIdx = 5; // Default row 6 (0-indexed 5)
+          const colMap = {};
+          for (let r = 0; r < Math.min(res.data.length, 7); r++) {
+            const rowArr = res.data[r] || [];
+            const rowStr = JSON.stringify(rowArr).toUpperCase();
+            if (rowStr.includes('RETURN NO') || rowStr.includes('DO-DELIVERY ORDER NO') || rowStr.includes('MATERIAL RETURN')) {
+              headerRowIdx = r;
+              rowArr.forEach((cell, cIdx) => {
+                const cleanHdr = (cell || '').toString().trim().toLowerCase();
+                if (cleanHdr) {
+                  colMap[cleanHdr] = cIdx;
+                }
+              });
+              break;
+            }
+          }
+
+          const entries = [];
+          let maxReturnSeq = 0;
+          for (let i = headerRowIdx + 1; i < res.data.length; i++) {
+            const row = res.data[i];
+            if (!row || row.length === 0 || !row.some((c) => c !== null && c !== '')) continue;
+            const returnNo = (row[colMap['return no.']] ?? '').toString().trim();
+            const doNumber = (row[colMap['do-delivery order no.']] ?? '').toString().trim();
+            if (!returnNo && !doNumber) continue;
+
+            const m = returnNo.match(/RET-(\d+)/i);
+            if (m) {
+              const num = parseInt(m[1], 10);
+              if (num > maxReturnSeq) maxReturnSeq = num;
+            }
+
+            entries.push({
+              rowIndex: i + 1,
+              timestamp: formatAppDate(row[colMap['timestamp']] || ''),
+              returnNo,
+              doNumber,
+              partyNames: (row[colMap['party names']] ?? '').toString().trim(),
+              productName: (row[colMap['product name']] ?? '').toString().trim(),
+              qty: (row[colMap['qty']] ?? '').toString().trim(),
+              rateOfMaterial: (row[colMap['rate of material']] ?? '').toString().trim(),
+              billNo: (row[colMap['bill no.']] ?? '').toString().trim(),
+              billCopy: (row[colMap['bill copy']] ?? '').toString().trim(),
+              transportPayment: (row[colMap['tranport payment']] ?? '').toString().trim(),
+              partyDebitNoteCopy: (row[colMap['party debit note copy']] ?? '').toString().trim(),
+              reason: (row[colMap['reason of material return']] ?? '').toString().trim(),
+              // Stage 1: Arrange Logistic For Lift Return Material
+              planned1: formatAppDate(row[colMap['planned1']] || ''),
+              actual1: formatAppDate(row[colMap['actual1']] || ''),
+              transporterName: (row[colMap['transporter name']] ?? '').toString().trim(),
+              biltyNo: (row[colMap['bilty no.']] ?? '').toString().trim(),
+              vehicleNo: (row[colMap['vehicle no.']] ?? '').toString().trim(),
+              typeOfRate: (row[colMap['type of rate']] ?? '').toString().trim(),
+              // Stage 2: Recived Return Material From Party
+              planned2: formatAppDate(row[colMap['planned2']] || ''),
+              actual2: formatAppDate(row[colMap['actual2']] || ''),
+              qtyOfReturnMaterial: (row[colMap['qty of return material']] ?? '').toString().trim(),
+              conditionOfMaterial: (row[colMap['condition of material']] ?? '').toString().trim(),
+              photoOfReturnMaterial: (row[colMap['photo of return material']] ?? '').toString().trim(),
+              // Stage 3: Issue Note
+              planned3: formatAppDate(row[colMap['planned3']] || ''),
+              actual3: formatAppDate(row[colMap['actual3']] || ''),
+              creditNoteCopy: (row[colMap['credit note copy']] ?? '').toString().trim(),
+              creditNoteNo: (row[colMap['credit note no.']] ?? '').toString().trim(),
+              // Stage 4: Send To Party
+              planned4: formatAppDate(row[colMap['planned4']] || ''),
+              actual4: formatAppDate(row[colMap['actual4']] || ''),
+              status4: (row[colMap['status4']] ?? '').toString().trim(),
+            });
+          }
+
+          return { success: true, data: entries, maxReturnSeq };
+        }
+      } catch (err) {
+        console.warn('Error reading Material Return entries:', err);
+      }
+    }
+    return { success: true, data: [], maxReturnSeq: 0 };
+  },
+
+  async insertMaterialReturnRows(rows) {
+    if (!FORCE_MOCK) {
+      for (const rowObj of rows) {
+        const res = await sendToAppsScript({
+          action: 'insert',
+          sheetName: 'Material Return',
+          rowDataObj: JSON.stringify(rowObj),
+        });
+        if (!res || !res.success) {
+          return { success: false, error: res?.error || 'Failed to insert row into Material Return' };
+        }
+      }
+      return { success: true, message: `Successfully inserted ${rows.length} rows into Material Return` };
+    }
+    return { success: true, message: 'Inserted into mock' };
+  },
+
+  async updateMaterialReturnFields(rowIndex, fieldsObj) {
+    if (!FORCE_MOCK) {
+      const res = await sendToAppsScript({
+        action: 'update',
+        sheetName: 'Material Return',
+        rowIndex: rowIndex,
+        rowDataObj: JSON.stringify(fieldsObj),
+      });
+      if (res && res.success) {
+        return { success: true, message: 'Material Return sheet updated successfully!' };
+      }
+      return { success: false, error: res?.error || 'Failed to update Material Return sheet' };
+    }
+    return { success: true, message: 'Updated in mock' };
+  },
+
   formatDate: formatAppDate,
 };
