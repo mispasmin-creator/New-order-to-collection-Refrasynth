@@ -693,8 +693,8 @@ export default function ArrangeLogisticsPage() {
                         >
                           <option value="Fixed Amount">Fixed Amount</option>
                           <option value="Per Matric Ton rate">Per Matric Ton rate</option>
-                          {/* <option value="Fixed">Fixed</option>
-                          <option value="Per Kg">Per Kg</option> */}
+                          <option value="Fixed">Ex Factory</option>
+                          <option value="Per Kg">For</option>
                         </select>
                       </div>
 
