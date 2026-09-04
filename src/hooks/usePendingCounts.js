@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 
-// Groups entries that share the same shipment/PO into a single batch — the exact
-// key used across Dispatch/Arrange Logistics/Billing-stage pages, so counts here
-// line up with what each page's own "Pending" tab shows.
+// Groups Dispatch entries that share the same shipment/PO into a single batch —
+// used only pre-Arrange-Logistics, where entries have no LGST number yet. This
+// mirrors ArrangeLogisticsPage's own grouping of Dispatch entries.
 function groupIntoShipmentBatches(entries) {
   const groups = [];
   const indexByKey = {};
@@ -15,6 +15,25 @@ function groupIntoShipmentBatches(entries) {
       String(entry.typeOfTransporting ?? '').trim().toLowerCase(),
       String(entry.dateOfDispatch ?? '').trim(),
     ].join('|');
+    if (indexByKey[key] === undefined) {
+      indexByKey[key] = groups.length;
+      groups.push([entry]);
+    } else {
+      groups[indexByKey[key]].push(entry);
+    }
+  });
+  return groups;
+}
+
+// Groups Billing entries (post-Arrange-Logistics) strictly by LGST batch number —
+// the real shipment boundary once one's been assigned, matching every downstream
+// stage page. Two separate Arrange Logistics submissions must never re-merge here
+// just because they happen to share the same PO/party/transport/date.
+function groupByLgstNo(entries) {
+  const groups = [];
+  const indexByKey = {};
+  entries.forEach((entry) => {
+    const key = String(entry.lgstNo ?? '').trim().toLowerCase();
     if (indexByKey[key] === undefined) {
       indexByKey[key] = groups.length;
       groups.push([entry]);
@@ -120,14 +139,14 @@ export default function usePendingCounts() {
           });
 
       const stageBatches = {
-        loadMaterial: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo)),
-        weighmentEntry: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.loadActual)),
-        makeInvoice: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.weighmentActual)),
-        salesForm3: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.invoiceActual)),
-        entryInBilty: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
-        sendTestCertificate: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
-        partyGetReport: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.tcActual)),
-        fullKitting: groupIntoShipmentBatches(enrichBilling((e) => e.lgstNo && e.reportActual)),
+        loadMaterial: groupByLgstNo(enrichBilling((e) => e.lgstNo)),
+        weighmentEntry: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.loadActual)),
+        makeInvoice: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.weighmentActual)),
+        salesForm3: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.invoiceActual)),
+        entryInBilty: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
+        sendTestCertificate: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
+        partyGetReport: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.tcActual)),
+        fullKitting: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.reportActual)),
       };
       const countPending = (batches, doneField) =>
         batches.filter((batch) => !batch.every((e) => Boolean(e[doneField]))).length;

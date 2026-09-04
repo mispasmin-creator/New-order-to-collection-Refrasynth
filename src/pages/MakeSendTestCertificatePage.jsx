@@ -123,13 +123,11 @@ export default function MakeSendTestCertificatePage() {
     const groups = [];
     const indexByKey = {};
     enrichedBillingEntries.forEach((entry) => {
-      const key = [
-        String(entry.partyPoNo ?? '').trim().toLowerCase(),
-        String(entry.partyPoDate ?? '').trim(),
-        String(entry.partyNames ?? '').trim().toLowerCase(),
-        String(entry.typeOfTransporting ?? '').trim().toLowerCase(),
-        String(entry.dateOfDispatch ?? '').trim(),
-      ].join('|');
+      // Group strictly by the LGST batch number assigned during Arrange
+      // Logistics — that's the real shipment boundary. Two separate
+      // Arrange Logistics submissions must never re-merge here just
+      // because they happen to share the same PO/party/transport/date.
+      const key = String(entry.lgstNo ?? '').trim().toLowerCase();
       if (indexByKey[key] === undefined) {
         indexByKey[key] = groups.length;
         groups.push({ key, entries: [entry] });
