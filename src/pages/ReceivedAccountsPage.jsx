@@ -282,13 +282,15 @@ export default function ReceivedAccountsPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">PO Copy</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">PO Date</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center text-slate-400">
+                  <td colSpan="11" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading orders from Google Sheets...
@@ -297,7 +299,7 @@ export default function ReceivedAccountsPage() {
                 </tr>
               ) : groupedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-slate-400">
+                  <td colSpan="11" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No orders in this stage
@@ -377,6 +379,23 @@ export default function ReceivedAccountsPage() {
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-right font-bold text-emerald-700">
                         {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {order.uploadSo && order.uploadSo.startsWith('http') ? (
+                          <a
+                            href={order.uploadSo}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
+                          >
+                            View <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-600">
+                        {api.formatDate(order.partyPoDate) || '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-center">
                         {isDone ? (
