@@ -56,7 +56,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-slate-800 text-base leading-tight tracking-tight truncate">
-              Refrasynth
+              Order To Collection
             </span>
           </div>
         )}

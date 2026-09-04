@@ -52,7 +52,7 @@ export default function LoginPage() {
           <div className="w-11 h-11 rounded-xl bg-white flex items-center justify-center shadow-md shadow-slate-200 border border-slate-100 p-1.5">
             <img src="/icons.png" alt="Order To Collection" className="w-full h-full object-contain" />
           </div>
-          <span className="font-bold text-slate-800 text-lg tracking-tight">Order To Collection</span>
+          <span className="font-bold text-slate-800 text-lg tracking-tight">Order To Collection Refrasynth App</span>
         </div>
 
         <div className="max-w-md">

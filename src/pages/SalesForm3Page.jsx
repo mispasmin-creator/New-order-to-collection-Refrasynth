@@ -313,9 +313,11 @@ export default function SalesForm3Page() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Bill Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bill No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status4</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
+                
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
