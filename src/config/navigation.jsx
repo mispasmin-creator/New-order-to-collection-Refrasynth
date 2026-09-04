@@ -39,6 +39,7 @@ import FullKittingPage from '../pages/FullKittingPage';
 import OrderCancelPage from '../pages/OrderCancelPage';
 import MaterialReturnPage from '../pages/MaterialReturnPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
+import { navPages } from './navPages';
 
 /**
  * ICON REGISTRY
@@ -68,190 +69,44 @@ export const iconMap = {
   RotateCcw,
 };
 
+// Maps each navPages id to the component that renders it. The id/label/path/
+// icon list itself lives in navPages.js (no component imports there) so
+// pages like Manage Users can read the full step list without a circular
+// import back into this file.
+const componentMap = {
+  dashboard: DashboardPage,
+  orders: OrdersPage,
+  'check-po': CheckPOPage,
+  'received-accounts': ReceivedAccountsPage,
+  'check-for-delivery': CheckForDeliveryPage,
+  'dispatch-planning': DispatchPlanningPage,
+  'arrange-logistics': ArrangeLogisticsPage,
+  'load-material': LoadMaterialPage,
+  'weighment-entry': WeighmentEntryPage,
+  'make-invoice': MakeInvoicePage,
+  'sales-form-3': SalesForm3Page,
+  'entry-in-bilty': EntryInBiltyPage,
+  'make-send-test-certificate': MakeSendTestCertificatePage,
+  'party-get-report': PartyGetReportPage,
+  'full-kitting': FullKittingPage,
+  'order-cancel': OrderCancelPage,
+  'material-return': MaterialReturnPage,
+  'manage-users': ManageUsersPage,
+};
+
 /**
  * DYNAMIC NAVIGATION & ROUTING CONFIGURATION
  * -------------------------------------------------------------
- * Adding a new page to the app takes ONLY 1 entry here!
+ * Adding a new page to the app takes 2 steps:
+ *   1. Add its id/label/path/icon to navPages.js
+ *   2. Import its component above and add it to componentMap here
  * Both the Sidebar navigation links and the React Router routes
  * will automatically update based on this array.
- *
- * Fields:
- * - id: Unique identifier
- * - label: Text shown in the sidebar and page headers
- * - path: URL route path (e.g. '/dashboard', '/orders', '/customers', '/manage-users')
- * - icon: Name of the icon from iconMap
- * - component: React component to render
- * - inSidebar: Set to true to display in the fixed sidebar
- * - badge: (Optional) string or number to show a small badge
  */
-export const navConfig = [
-  {
-    id: 'dashboard',
-    label: 'Dashboard',
-    path: '/dashboard',
-    icon: 'LayoutDashboard',
-    component: DashboardPage,
-    inSidebar: true,
-  },
-  {
-    id: 'orders',
-    label: 'Orders',
-    path: '/orders',
-    icon: 'ShoppingCart',
-    component: OrdersPage,
-    inSidebar: true,
-  },
-  {
-    id: 'check-po',
-    label: 'Check PO',
-    path: '/check-po',
-    icon: 'ClipboardCheck',
-    component: CheckPOPage,
-    inSidebar: true,
-  },
-  {
-    id: 'received-accounts',
-    label: 'Received Accounts',
-    path: '/received-accounts',
-    icon: 'IndianRupee',
-    component: ReceivedAccountsPage,
-    inSidebar: true,
-  },
-  {
-    id: 'check-for-delivery',
-    label: 'Check for Delivery',
-    path: '/check-for-delivery',
-    icon: 'Truck',
-    component: CheckForDeliveryPage,
-    inSidebar: true,
-  },
-  {
-    id: 'dispatch-planning',
-    label: 'Dispatch Planning',
-    path: '/dispatch-planning',
-    icon: 'ClipboardList',
-    component: DispatchPlanningPage,
-    inSidebar: true,
-  },
-  {
-    id: 'arrange-logistics',
-    label: 'Arrange Logistics',
-    path: '/arrange-logistics',
-    icon: 'Boxes',
-    component: ArrangeLogisticsPage,
-    inSidebar: true,
-  },
-  {
-    id: 'load-material',
-    label: 'Load Material',
-    path: '/load-material',
-    icon: 'Package',
-    component: LoadMaterialPage,
-    inSidebar: true,
-  },
-  {
-    id: 'weighment-entry',
-    label: 'Weighment Entry',
-    path: '/weighment-entry',
-    icon: 'Scale',
-    component: WeighmentEntryPage,
-    inSidebar: true,
-  },
-  {
-    id: 'make-invoice',
-    label: 'Make Invoice',
-    path: '/make-invoice',
-    icon: 'FileText',
-    component: MakeInvoicePage,
-    inSidebar: true,
-  },
-  {
-    id: 'sales-form-3',
-    label: 'Sales Form 3',
-    path: '/sales-form-3',
-    icon: 'ClipboardList',
-    component: SalesForm3Page,
-    inSidebar: true,
-  },
-  {
-    id: 'entry-in-bilty',
-    label: 'Entry In Bilty',
-    path: '/entry-in-bilty',
-    icon: 'FileSpreadsheet',
-    component: EntryInBiltyPage,
-    inSidebar: true,
-  },
-  {
-    id: 'make-send-test-certificate',
-    label: 'Send Test Certificate',
-    path: '/make-send-test-certificate',
-    icon: 'BadgeCheck',
-    component: MakeSendTestCertificatePage,
-    inSidebar: true,
-  },
-  {
-    id: 'party-get-report',
-    label: 'Party Get Report',
-    path: '/party-get-report',
-    icon: 'Inbox',
-    component: PartyGetReportPage,
-    inSidebar: true,
-  },
-  {
-    id: 'full-kitting',
-    label: 'Full Kitting',
-    path: '/full-kitting',
-    icon: 'PackageCheck',
-    component: FullKittingPage,
-    inSidebar: true,
-  },
-  {
-    id: 'order-cancel',
-    label: 'Order Cancel',
-    path: '/order-cancel',
-    icon: 'Ban',
-    component: OrderCancelPage,
-    inSidebar: true,
-  },
-  {
-    id: 'material-return',
-    label: 'Material Return',
-    path: '/material-return',
-    icon: 'RotateCcw',
-    component: MaterialReturnPage,
-    inSidebar: true,
-  },
-  {
-    id: 'manage-users',
-    label: 'Manage Users',
-    path: '/manage-users',
-    icon: 'Users',
-    component: ManageUsersPage,
-    inSidebar: true,
-  },
-  /* 
-   * [TEMPLATE FOR FUTURE PAGES]
-   * To add a new page (Customers, Inventory, Reports, etc.),
-   * simply uncomment or add an item like below:
-   *
-   * {
-   *   id: 'customers',
-   *   label: 'Customers',
-   *   path: '/customers',
-   *   icon: 'Users',
-   *   component: CustomersPage,
-   *   inSidebar: true,
-   * },
-   * {
-   *   id: 'reports',
-   *   label: 'Reports',
-   *   path: '/reports',
-   *   icon: 'BarChart3',
-   *   component: ReportsPage,
-   *   inSidebar: true,
-   * },
-   */
-];
+export const navConfig = navPages.map((page) => ({
+  ...page,
+  component: componentMap[page.id],
+}));
 
 /**
  * Returns only items meant for the sidebar

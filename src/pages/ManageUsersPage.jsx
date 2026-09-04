@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import { getSidebarPages } from '../config/navPages';
 import {
   Users,
   UserPlus,
@@ -18,18 +19,9 @@ import {
   Lock,
 } from 'lucide-react';
 
-const AVAILABLE_PAGES = [
-  { id: 'Dashboard',          label: 'Dashboard'          },
-  { id: 'Orders',             label: 'Orders'             },
-  { id: 'Check PO',           label: 'Check PO'           },
-  { id: 'Received Accounts',  label: 'Received Accounts'  },
-  { id: 'Check for Delivery', label: 'Check for Delivery' },
-  { id: 'Arrange Logistics',  label: 'Arrange Logistics'  },
-  { id: 'Logistics Approval', label: 'Logistics Approval' },
-  { id: 'Dispatch Planning',  label: 'Dispatch Planning'  },
-  { id: 'Accounts Approval',  label: 'Accounts Approval'  },
-  { id: 'Manage Users',       label: 'Manage Users'       },
-];
+// Pulled directly from the sidebar/route config so this list always matches
+// every real step of the O2C workflow — new pages need no edit here.
+const AVAILABLE_PAGES = getSidebarPages().map((item) => ({ id: item.label, label: item.label }));
 
 const emptyUserForm = {
   username: '',
