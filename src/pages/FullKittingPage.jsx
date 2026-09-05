@@ -27,6 +27,7 @@ export default function FullKittingPage() {
 
   const [dispatchEntries, setDispatchEntries]   = useState([]);
   const [billingEntries, setBillingEntries]     = useState([]);
+  const [kittingEntries, setKittingEntries]     = useState([]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen]       = useState(false);
@@ -56,10 +57,11 @@ export default function FullKittingPage() {
     else setLoading(true);
     setError('');
     try {
-      const [ordersRes, dispatchRes, billingRes] = await Promise.all([
+      const [ordersRes, dispatchRes, billingRes, kittingRes] = await Promise.all([
         api.getOrders(),
         api.getDispatchEntries(),
         api.getLogisticsEntries(),
+        api.getFullKittingEntries(),
       ]);
 
       if (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) {
@@ -74,6 +76,10 @@ export default function FullKittingPage() {
 
       if (billingRes && billingRes.success && Array.isArray(billingRes.data)) {
         setBillingEntries(billingRes.data);
+      }
+
+      if (kittingRes && kittingRes.success && Array.isArray(kittingRes.data)) {
+        setKittingEntries(kittingRes.data);
       }
     } catch (err) {
       setError(err.message || 'Error fetching data.');
@@ -101,6 +107,20 @@ export default function FullKittingPage() {
     });
     return map;
   }, [orders]);
+
+  // Full Kitting rows store comma-joined LGST numbers (one combined row per
+  // shipment) — split them back out so each individual LGST can look up its
+  // own Transport Amount for display in the table.
+  const kittingByLgstNo = useMemo(() => {
+    const map = {};
+    kittingEntries.forEach((k) => {
+      (k.lgstNo || '').split(',').forEach((raw) => {
+        const key = raw.trim().toLowerCase();
+        if (key) map[key] = k;
+      });
+    });
+    return map;
+  }, [kittingEntries]);
 
   const dispatchByDNumber = useMemo(() => {
     const map = {};
@@ -375,6 +395,7 @@ export default function FullKittingPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Transporter</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Grn Number</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Transport Amount</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status8</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
               </tr>
@@ -382,7 +403,7 @@ export default function FullKittingPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="11" className="py-20 text-center text-slate-400">
+                  <td colSpan="12" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-indigo-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading shipments from Google Sheets...
@@ -391,7 +412,7 @@ export default function FullKittingPage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="py-16 text-center text-slate-400">
+                  <td colSpan="12" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -412,6 +433,7 @@ export default function FullKittingPage() {
                   const totalQty = batch.entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
                   const lgstNos = [...new Set(batch.entries.map((e) => e.lgstNo).filter(Boolean))];
                   const done = isBatchDone(batch);
+                  const kittingRecord = kittingByLgstNo[(primary.lgstNo || '').trim().toLowerCase()];
 
                   return (
                     <tr key={batch.key} className="hover:bg-slate-50/80 transition-colors">
@@ -477,6 +499,9 @@ export default function FullKittingPage() {
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {primary.grnNumber || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right font-semibold text-emerald-700">
+                        {kittingRecord?.transportAmount ? `₹${Number(kittingRecord.transportAmount).toLocaleString('en-IN')}` : '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {primary.kittingStatus || '—'}

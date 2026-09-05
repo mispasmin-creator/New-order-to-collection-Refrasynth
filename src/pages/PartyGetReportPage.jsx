@@ -323,6 +323,7 @@ export default function PartyGetReportPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Received Date</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Image Of Received Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Grn Number</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
               </tr>
@@ -330,7 +331,7 @@ export default function PartyGetReportPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="py-20 text-center text-slate-400">
+                  <td colSpan="11" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading shipments from Google Sheets...
@@ -339,7 +340,7 @@ export default function PartyGetReportPage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="py-16 text-center text-slate-400">
+                  <td colSpan="11" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -422,6 +423,11 @@ export default function PartyGetReportPage() {
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {api.formatDate(primary.receivedDate) || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {primary.receivedCopyImage ? (
+                          <a href={primary.receivedCopyImage} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {primary.grnNumber || '—'}
