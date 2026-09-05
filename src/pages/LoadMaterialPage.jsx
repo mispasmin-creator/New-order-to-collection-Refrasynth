@@ -371,18 +371,21 @@ export default function LoadMaterialPage() {
                               </span>
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal(batch)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all ${
-                              loaded
-                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                : 'bg-teal-600 hover:bg-teal-700 text-white'
-                            }`}
-                          >
-                            <Boxes className="w-3.5 h-3.5" />
-                            {loaded ? 'Edit Load Entry' : 'Load Material'}
-                          </button>
+                          {loaded ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Completed
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenModal(batch)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all bg-teal-600 hover:bg-teal-700 text-white"
+                            >
+                              <Boxes className="w-3.5 h-3.5" />
+                              Load Material
+                            </button>
+                          )}
                         </div>
                       </td>
 

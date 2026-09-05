@@ -375,18 +375,21 @@ export default function EntryInBiltyPage() {
                               </span>
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenModal(batch)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all ${
-                              done
-                                ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                : 'bg-amber-700 hover:bg-amber-800 text-white'
-                            }`}
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            {done ? 'Edit Bilty' : 'Entry In Bilty'}
-                          </button>
+                          {done ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Completed
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenModal(batch)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg shadow-sm hover:shadow-md transition-all bg-amber-700 hover:bg-amber-800 text-white"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              Entry In Bilty
+                            </button>
+                          )}
                         </div>
                       </td>
 
