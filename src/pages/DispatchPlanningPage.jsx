@@ -134,15 +134,19 @@ export default function DispatchPlanningPage() {
     return orders.filter((o) => Boolean(o.actual3));
   }, [orders]);
 
-  // Tab & Search filtered orders — Pending = still needs dispatching (remaining
-  // qty > 0); History = every order that has at least one dispatch record, even
-  // if it's only partially dispatched, so partial orders can show in both tabs.
+  const orderByDoNumber = useMemo(() => {
+    const map = {};
+    orders.forEach((o) => {
+      const key = (o.doNumber || '').trim().toLowerCase();
+      if (key) map[key] = o;
+    });
+    return map;
+  }, [orders]);
+
+  // Pending tab: still needs dispatching (remaining qty > 0) — order/PO-level.
   const filteredOrders = useMemo(() => {
     return eligibleOrders.filter((order) => {
-      const isPending = getRemainingQty(order) > 0.0001;
-      const hasDispatched = (dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0) > 0;
-      if (statusTab === 'Pending' && !isPending) return false;
-      if (statusTab === 'History' && !hasDispatched) return false;
+      if (getRemainingQty(order) <= 0.0001) return false;
 
       const q = searchQuery.toLowerCase();
       if (!q) return true;
@@ -155,7 +159,7 @@ export default function DispatchPlanningPage() {
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eligibleOrders, dispatchedByDo, statusTab, searchQuery]);
+  }, [eligibleOrders, dispatchedByDo, searchQuery]);
 
   // Group multi-product submissions (same Party PO No + Date + Party Name) into a
   // single row so one PO with several products reads — and gets dispatched — as one order
@@ -178,16 +182,49 @@ export default function DispatchPlanningPage() {
     return groups;
   }, [filteredOrders]);
 
+  // History tab: one row PER DISPATCH ACTION, not per PO — grouped by the exact
+  // Timestamp every entry in a single "Dispatch PO" submission shares, so two
+  // separate submissions for the same PO/DO never re-merge into one row even
+  // when they share the same party/transport type/dispatch date.
+  const allHistoryBatches = useMemo(() => {
+    const groups = [];
+    const indexByKey = {};
+    dispatchEntries.forEach((entry) => {
+      const key = String(entry.timestamp ?? '').trim();
+      if (!key) return;
+      if (indexByKey[key] === undefined) {
+        indexByKey[key] = groups.length;
+        groups.push({ key, entries: [entry] });
+      } else {
+        groups[indexByKey[key]].entries.push(entry);
+      }
+    });
+    return groups;
+  }, [dispatchEntries]);
+
+  const historyBatches = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return allHistoryBatches;
+    return allHistoryBatches.filter((batch) =>
+      batch.entries.some((e) => {
+        const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+        return (
+          (e.doNumber && e.doNumber.toLowerCase().includes(q)) ||
+          (order?.partyPoNo && order.partyPoNo.toLowerCase().includes(q)) ||
+          (e.partyName && e.partyName.toLowerCase().includes(q)) ||
+          (e.productName && e.productName.toLowerCase().includes(q))
+        );
+      })
+    );
+  }, [allHistoryBatches, orderByDoNumber, searchQuery]);
+
   // Counts
   const pendingCount = useMemo(
     () => eligibleOrders.filter((o) => getRemainingQty(o) > 0.0001).length,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [eligibleOrders, dispatchedByDo]
   );
-  const completedCount = useMemo(
-    () => eligibleOrders.filter((o) => (dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0) > 0).length,
-    [eligibleOrders, dispatchedByDo]
-  );
+  const completedCount = allHistoryBatches.length;
 
   // Open modal — accepts a single order or a group of orders sharing one PO
   const handleOpenModal = (orderOrGroup) => {
@@ -407,6 +444,105 @@ export default function DispatchPlanningPage() {
                     </p>
                   </td>
                 </tr>
+              ) : statusTab === 'History' ? (
+                historyBatches.length === 0 ? (
+                  <tr>
+                    <td colSpan="10" className="py-16 text-center text-slate-400">
+                      <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <h3 className="text-sm font-semibold text-slate-700">
+                        No dispatch records yet
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Every "Dispatch PO" submission will appear here as its own row.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  historyBatches.map((batch) => {
+                    const entries = batch.entries;
+                    const isGroup = entries.length > 1;
+                    const primaryOrder = orderByDoNumber[(entries[0].doNumber || '').trim().toLowerCase()] || {};
+                    const doNumbers = entries.map((e) => e.doNumber).filter(Boolean).join(', ');
+                    const productNames = entries.map((e) => e.productName).filter(Boolean);
+                    const batchQtySum = entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
+                    const orderQtySum = entries.reduce((sum, e) => {
+                      const o = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+                      return sum + (Number(o?.quantity) || 0);
+                    }, 0);
+                    const pendingSum = entries.reduce((sum, e) => {
+                      const o = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+                      return sum + (o ? getRemainingQty(o) : 0);
+                    }, 0);
+                    const totalPoValueSum = entries.reduce((sum, e) => {
+                      const o = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+                      return sum + (Number(o?.totalPoValue) || 0);
+                    }, 0);
+                    const viewRows = entries
+                      .map((e) => orderByDoNumber[(e.doNumber || '').trim().toLowerCase()])
+                      .filter(Boolean);
+
+                    return (
+                      <tr key={batch.key} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenView(viewRows.length > 0 ? viewRows : entries)}
+                            title={isGroup ? `View all ${entries.length} products` : 'View Full Details'}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative inline-flex"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {isGroup && (
+                              <span className="absolute -top-1 -right-1 flex items-center justify-center w-3.5 h-3.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full">
+                                {entries.length}
+                              </span>
+                            )}
+                          </button>
+                        </td>
+
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-400 text-[11px] font-mono">
+                          {entries[0].timestamp || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-indigo-600" title={isGroup ? doNumbers : undefined}>
+                          {isGroup ? `${entries[0].doNumber} +${entries.length - 1}` : (entries[0].doNumber || '—')}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
+                          {primaryOrder.partyPoNo || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
+                          {primaryOrder.partyNames || entries[0].partyName || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-700" title={isGroup ? productNames.join(', ') : undefined}>
+                          {isGroup ? `${entries.length} products` : (entries[0].productName || '—')}
+                        </td>
+                        <td className="px-3.5 py-3 text-right text-slate-800">
+                          <span className="whitespace-nowrap">{orderQtySum ? fmtQty(orderQtySum) : '—'}</span>
+                        </td>
+                        <td className="px-3.5 py-3 text-right text-slate-700">
+                          <span className="whitespace-nowrap font-semibold text-emerald-700">{fmtQty(batchQtySum)}</span>
+                        </td>
+                        <td className="px-3.5 py-3 text-right font-semibold text-amber-600">
+                          <span className="whitespace-nowrap">{fmtQty(pendingSum)}</span>
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-right font-bold text-emerald-700">
+                          {totalPoValueSum ? `₹${totalPoValueSum.toLocaleString('en-IN')}` : '—'}
+                        </td>
+                        <td className="px-3.5 py-3">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {entries.map((e, i) => (
+                              <span
+                                key={e.dNumber ? `${e.dNumber}-${i}` : i}
+                                className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-semibold"
+                                title={`${e.doNumber || ''} — ${e.qtyToBeDispatched || ''} on ${e.dateOfDispatch || ''}`}
+                              >
+                                {e.dNumber}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
               ) : groupedOrders.length === 0 ? (
                 <tr>
                   <td colSpan="10" className="py-16 text-center text-slate-400">
@@ -415,9 +551,7 @@ export default function DispatchPlanningPage() {
                       No orders in this stage
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      {statusTab === 'Pending'
-                        ? 'Orders completed in "Check for Delivery" will appear here.'
-                        : 'No orders match your filter.'}
+                      Orders completed in "Check for Delivery" will appear here.
                     </p>
                   </td>
                 </tr>
