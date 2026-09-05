@@ -2,11 +2,21 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { navConfig } from './config/navigation';
+import { getFirstAllowedPath } from './utils/permissions';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import RequirePagePermission from './components/common/RequirePagePermission';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
 
-// Helper component: redirects authenticated user away from login page to dashboard
+// Lands the user on the first page their Page Permissions actually allow,
+// instead of a hardcoded route they may not have access to.
+function DefaultRedirect() {
+  const { user } = useAuth();
+  const target = getFirstAllowedPath(user, navConfig) || '/dashboard';
+  return <Navigate to={target} replace />;
+}
+
+// Helper component: redirects authenticated user away from login page to their landing page
 function PublicLoginRoute() {
   const { user, loading } = useAuth();
 
@@ -19,7 +29,7 @@ function PublicLoginRoute() {
   }
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return <DefaultRedirect />;
   }
 
   return <LoginPage />;
@@ -36,17 +46,22 @@ export default function App() {
           {/* Protected Application Routes (Driven by navConfig) */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              {/* Default redirect to /dashboard */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              {/* Default redirect to the user's first permitted page */}
+              <Route path="/" element={<DefaultRedirect />} />
 
-              {/* Dynamically register all pages defined in navConfig */}
+              {/* Dynamically register all pages defined in navConfig, each
+                  gated by the logged-in user's Page Permissions */}
               {navConfig.map((item) => {
                 const Component = item.component;
                 return (
                   <Route
                     key={item.id}
                     path={item.path}
-                    element={<Component />}
+                    element={
+                      <RequirePagePermission label={item.label}>
+                        <Component />
+                      </RequirePagePermission>
+                    }
                   />
                 );
               })}
@@ -54,7 +69,7 @@ export default function App() {
           </Route>
 
           {/* Catch-all fallback */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<DefaultRedirect />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

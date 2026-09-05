@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { hasPagePermission } from '../utils/permissions';
 import StatCard from '../components/common/StatCard';
 import {
   ShoppingCart,
@@ -39,6 +41,7 @@ const isSameDay = (a, b) =>
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [orders, setOrders]                 = useState([]);
   const [dispatchEntries, setDispatchEntries] = useState([]);
   const [billingEntries, setBillingEntries]   = useState([]);
@@ -473,7 +476,7 @@ export default function DashboardPage() {
                 { to: '/check-for-delivery', label: 'Check for Delivery', desc: 'Confirm stock before dispatch', icon: Truck },
                 { to: '/arrange-logistics', label: 'Arrange Logistics', desc: `${arrangedCount} shipments arranged`, icon: Boxes },
                 { to: '/make-invoice', label: 'Make Invoice', desc: `${invoicedCount} invoiced`, icon: FileText },
-              ].map((item) => (
+              ].filter((item) => hasPagePermission(user, item.label)).map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}

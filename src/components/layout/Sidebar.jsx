@@ -3,13 +3,14 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getSidebarItems, renderNavIcon } from '../../config/navigation';
 import usePendingCounts from '../../hooks/usePendingCounts';
+import { hasPagePermission } from '../../utils/permissions';
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const STORAGE_KEY = 'sidebarCollapsed';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
-  const sidebarItems = getSidebarItems();
+  const sidebarItems = getSidebarItems().filter((item) => hasPagePermission(user, item.label));
   const { counts: pendingCounts } = usePendingCounts();
 
   const [collapsed, setCollapsed] = useState(() => {
