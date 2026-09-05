@@ -134,12 +134,15 @@ export default function DispatchPlanningPage() {
     return orders.filter((o) => Boolean(o.actual3));
   }, [orders]);
 
-  // Tab & Search filtered orders
+  // Tab & Search filtered orders — Pending = still needs dispatching (remaining
+  // qty > 0); History = every order that has at least one dispatch record, even
+  // if it's only partially dispatched, so partial orders can show in both tabs.
   const filteredOrders = useMemo(() => {
     return eligibleOrders.filter((order) => {
-      const isDone = getRemainingQty(order) <= 0.0001;
-      if (statusTab === 'Pending' && isDone) return false;
-      if (statusTab === 'History' && !isDone) return false;
+      const isPending = getRemainingQty(order) > 0.0001;
+      const hasDispatched = (dispatchedByDo[(order.doNumber || '').trim().toLowerCase()] || 0) > 0;
+      if (statusTab === 'Pending' && !isPending) return false;
+      if (statusTab === 'History' && !hasDispatched) return false;
 
       const q = searchQuery.toLowerCase();
       if (!q) return true;
@@ -182,8 +185,7 @@ export default function DispatchPlanningPage() {
     [eligibleOrders, dispatchedByDo]
   );
   const completedCount = useMemo(
-    () => eligibleOrders.filter((o) => getRemainingQty(o) <= 0.0001).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () => eligibleOrders.filter((o) => (dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0) > 0).length,
     [eligibleOrders, dispatchedByDo]
   );
 
