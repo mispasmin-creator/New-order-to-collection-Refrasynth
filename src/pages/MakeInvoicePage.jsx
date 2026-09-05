@@ -333,13 +333,14 @@ export default function MakeInvoicePage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Weighment Iamge 1</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Planned 3</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bill No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Bill Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Invoice Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="19" className="py-20 text-center text-slate-400">
+                  <td colSpan="20" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading weighed shipments from Google Sheets...
@@ -348,7 +349,7 @@ export default function MakeInvoicePage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="19" className="py-16 text-center text-slate-400">
+                  <td colSpan="20" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -369,6 +370,7 @@ export default function MakeInvoicePage() {
                   const totalQty = batch.entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
                   const lgstNos = [...new Set(batch.entries.map((e) => e.lgstNo).filter(Boolean))];
                   const billNos = [...new Set(batch.entries.map((e) => e.billNo).filter(Boolean))];
+                  const billCopyUrl = batch.entries.map((e) => e.billCopy).find(Boolean);
                   const invoiced = isBatchInvoiced(batch);
 
                   return (
@@ -473,6 +475,11 @@ export default function MakeInvoicePage() {
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {billNos.join(', ') || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {billCopyUrl ? (
+                          <a href={billCopyUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap">
                         {invoiced ? (
