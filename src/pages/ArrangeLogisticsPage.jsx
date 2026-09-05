@@ -227,12 +227,10 @@ export default function ArrangeLogisticsPage() {
   const isBatchArranged = (batch) =>
     batch.entries.every((e) => (arrangedByDNumber[(e.dNumber || '').trim().toLowerCase()] || []).length > 0);
 
-  // Tab & Search filtered batches
+  // Pending tab: pre-arrangement Dispatch batches that still need action.
   const filteredBatches = useMemo(() => {
     return batches.filter((batch) => {
-      const arranged = isBatchArranged(batch);
-      if (statusTab === 'Pending' && arranged) return false;
-      if (statusTab === 'History' && !arranged) return false;
+      if (isBatchArranged(batch)) return false;
 
       const q = searchQuery.toLowerCase();
       if (!q) return true;
@@ -245,13 +243,57 @@ export default function ArrangeLogisticsPage() {
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batches, arrangedByDNumber, statusTab, searchQuery]);
+  }, [batches, arrangedByDNumber, searchQuery]);
+
+  // Dispatch entries keyed by D Number, to enrich Billing/logistics rows with
+  // the qty/date they were originally dispatched with.
+  const dispatchByDNumber = useMemo(() => {
+    const map = {};
+    dispatchEntries.forEach((e) => {
+      const key = (e.dNumber || '').trim().toLowerCase();
+      if (key) map[key] = e;
+    });
+    return map;
+  }, [dispatchEntries]);
+
+  // History tab: one row PER "Arrange Logistics" submission, not per pre-
+  // arrangement batch — grouped by the exact Timestamp every Billing row from
+  // one submission shares, so two separate arrangement actions for the same
+  // PO/type/date (which pre-arrangement look like one batch) never re-merge.
+  const allHistoryBatches = useMemo(() => {
+    const groups = [];
+    const indexByKey = {};
+    logisticsEntries.forEach((entry) => {
+      const key = String(entry.timestamp ?? '').trim();
+      if (!key) return;
+      if (indexByKey[key] === undefined) {
+        indexByKey[key] = groups.length;
+        groups.push({ key, entries: [entry] });
+      } else {
+        groups[indexByKey[key]].entries.push(entry);
+      }
+    });
+    return groups;
+  }, [logisticsEntries]);
+
+  const historyBatches = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    if (!q) return allHistoryBatches;
+    return allHistoryBatches.filter((batch) =>
+      batch.entries.some(
+        (e) =>
+          (e.doNumber && e.doNumber.toLowerCase().includes(q)) ||
+          (e.partyPoNumber && e.partyPoNumber.toLowerCase().includes(q)) ||
+          (e.partyName && e.partyName.toLowerCase().includes(q)) ||
+          (e.productName && e.productName.toLowerCase().includes(q))
+      )
+    );
+  }, [allHistoryBatches, searchQuery]);
 
   // Counts
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pendingCount = useMemo(() => batches.filter((b) => !isBatchArranged(b)).length, [batches, arrangedByDNumber]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const completedCount = useMemo(() => batches.filter((b) => isBatchArranged(b)).length, [batches, arrangedByDNumber]);
+  const completedCount = allHistoryBatches.length;
 
   // Open modal for a batch (one shipment — may cover several products/DOs).
   // Every not-yet-arranged product in the batch is arranged together, no picking needed.
@@ -484,6 +526,76 @@ export default function ArrangeLogisticsPage() {
                     </p>
                   </td>
                 </tr>
+              ) : statusTab === 'History' ? (
+                historyBatches.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="py-16 text-center text-slate-400">
+                      <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <h3 className="text-sm font-semibold text-slate-700">
+                        No shipments arranged yet
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Every "Arrange Logistics" submission will appear here as its own row.
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  historyBatches.map((batch) => {
+                    const entries = batch.entries;
+                    const isMulti = entries.length > 1;
+                    const primary = entries[0];
+                    const doNumbers = entries.map((e) => e.doNumber).filter(Boolean).join(', ');
+                    const productNames = entries.map((e) => e.productName).filter(Boolean);
+                    const totalQty = entries.reduce((sum, e) => {
+                      const dispatch = dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()];
+                      return sum + (parseFloat(dispatch?.qtyToBeDispatched) || 0);
+                    }, 0);
+                    const dispatchForDate = dispatchByDNumber[(primary.dispatchNo || '').trim().toLowerCase()];
+
+                    return (
+                      <tr key={batch.key} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Check className="w-3 h-3" /> Arranged
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-mono font-bold text-indigo-600" title={isMulti ? doNumbers : undefined}>
+                          {isMulti ? `${primary.doNumber} +${entries.length - 1}` : (primary.doNumber || '—')}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
+                          {primary.partyPoNumber || orderByDoNumber[(primary.doNumber || '').trim().toLowerCase()]?.partyPoNo || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap font-semibold text-slate-800">
+                          {primary.partyName || orderByDoNumber[(primary.doNumber || '').trim().toLowerCase()]?.partyNames || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-700" title={isMulti ? productNames.join(', ') : undefined}>
+                          {isMulti ? `${entries.length} products` : (primary.productName || '—')}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-800">
+                          {fmtQty(totalQty)}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                          {primary.typeOfTransporting || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                          {api.formatDate(dispatchForDate?.dateOfDispatch) || '—'}
+                        </td>
+                        <td className="px-3.5 py-3 whitespace-nowrap">
+                          <div className="flex flex-wrap gap-1">
+                            {entries.map((e, i) => (
+                              <span
+                                key={e.lgstNo ? `${e.lgstNo}-${i}` : i}
+                                className="inline-block px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-semibold"
+                              >
+                                {e.lgstNo}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
               ) : filteredBatches.length === 0 ? (
                 <tr>
                   <td colSpan="9" className="py-16 text-center text-slate-400">
@@ -492,9 +604,7 @@ export default function ArrangeLogisticsPage() {
                       No shipments in this stage
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      {statusTab === 'Pending'
-                        ? 'Batches dispatched from "Dispatch Planning" will appear here.'
-                        : 'No shipments match your filter.'}
+                      Batches dispatched from "Dispatch Planning" will appear here.
                     </p>
                   </td>
                 </tr>
