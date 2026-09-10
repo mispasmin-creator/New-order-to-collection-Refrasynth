@@ -8,6 +8,34 @@ import {
 const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || '').trim();
 const FORCE_MOCK = import.meta.env.VITE_USE_MOCK === 'true' || !APPS_SCRIPT_URL;
 
+// Short-lived read cache, keyed by sheet/tab. The sidebar's pending-count
+// poller and whichever page is currently mounted routinely request the same
+// sheet within the same second (e.g. both call getOrders()/getDispatchEntries()
+// on page load) — against this rate-limited, often slow Apps Script backend,
+// that doubles real load time for no benefit. Caching the in-flight PROMISE
+// (not just the resolved value) means simultaneous callers share one network
+// request instead of firing two, and a short TTL keeps data from going stale.
+const READ_CACHE_TTL_MS = 15000;
+const readCache = new Map();
+
+function cachedRead(key, fetcher) {
+  const cached = readCache.get(key);
+  if (cached && Date.now() - cached.time < READ_CACHE_TTL_MS) {
+    return cached.promise;
+  }
+  const promise = fetcher()
+    .then((result) => {
+      if (!result || result.success === false) readCache.delete(key);
+      return result;
+    })
+    .catch((err) => {
+      readCache.delete(key);
+      throw err;
+    });
+  readCache.set(key, { promise, time: Date.now() });
+  return promise;
+}
+
 /**
  * Normalise any timestamp value returned from Google Sheets into
  * the display format:  dd/MM/yyyy HH:mm:ss  (IST)
@@ -172,7 +200,10 @@ function parseMasterSheet(data) {
  */
 async function getFromAppsScript(sheetName) {
   if (FORCE_MOCK) return null;
+  return cachedRead(`get:${sheetName}`, () => getFromAppsScriptUncached(sheetName));
+}
 
+async function getFromAppsScriptUncached(sheetName) {
   try {
     const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheetName)}`;
     const response = await fetch(url, {
@@ -953,10 +984,10 @@ export const api = {
   async getLogisticsEntries() {
     if (!FORCE_MOCK) {
       try {
-        const res = await sendToAppsScript({
+        const res = await cachedRead('read:Billing', () => sendToAppsScript({
           action: 'read',
           sheet: 'Billing',
-        });
+        }));
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5; // Default row 6 (0-indexed 5)
           const colMap = {};
@@ -1072,10 +1103,10 @@ export const api = {
   async getFullKittingEntries() {
     if (!FORCE_MOCK) {
       try {
-        const res = await sendToAppsScript({
+        const res = await cachedRead('read:Full Kitting', () => sendToAppsScript({
           action: 'read',
           sheet: 'Full Kitting',
-        });
+        }));
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5;
           const colMap = {};
@@ -1184,10 +1215,10 @@ export const api = {
   async getDispatchEntries() {
     if (!FORCE_MOCK) {
       try {
-        const res = await sendToAppsScript({
+        const res = await cachedRead('read:Dispatch', () => sendToAppsScript({
           action: 'read',
           sheet: 'Dispatch',
-        });
+        }));
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5; // Default row 6 (0-indexed 5)
           const colMap = {};
@@ -1266,10 +1297,10 @@ export const api = {
   async getOrderCancelEntries() {
     if (!FORCE_MOCK) {
       try {
-        const res = await sendToAppsScript({
+        const res = await cachedRead('read:Order Cancel', () => sendToAppsScript({
           action: 'read',
           sheet: 'Order Cancel',
-        });
+        }));
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5; // Default row 6 (0-indexed 5)
           const colMap = {};
@@ -1368,10 +1399,10 @@ export const api = {
   async getMaterialReturnEntries() {
     if (!FORCE_MOCK) {
       try {
-        const res = await sendToAppsScript({
+        const res = await cachedRead('read:Material Return', () => sendToAppsScript({
           action: 'read',
           sheet: 'Material Return',
-        });
+        }));
         if (res && res.success && Array.isArray(res.data)) {
           let headerRowIdx = 5; // Default row 6 (0-indexed 5)
           const colMap = {};
