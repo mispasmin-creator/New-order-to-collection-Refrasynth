@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   RefreshCw,
@@ -227,6 +228,33 @@ export default function DispatchPlanningPage() {
   const completedCount = allHistoryBatches.length;
 
   // Open modal — accepts a single order or a group of orders sharing one PO
+  const buildExportRows = () => {
+    if (statusTab === 'History') {
+      return historyBatches.flatMap((batch) =>
+        batch.entries.map((e) => ({
+          'Timestamp': e.timestamp,
+          'D Number': e.dNumber,
+          'DO-Delivery Order No.': e.doNumber,
+          'Party Names': orderByDoNumber[(e.doNumber || '').trim().toLowerCase()]?.partyNames || e.partyName,
+          'Product Name': e.productName,
+          'Qty Dispatched': e.qtyToBeDispatched,
+          'Type Of Transporting': e.typeOfTransporting,
+          'Date Of Dispatch': e.dateOfDispatch,
+        }))
+      );
+    }
+    return filteredOrders.map((o) => ({
+      'DO-Delivery Order No.': o.doNumber,
+      'Party PO No': o.partyPoNo,
+      'Party Names': o.partyNames,
+      'Product Name': o.productName,
+      'Order Qty': o.quantity,
+      'Dispatched Qty': Math.round((dispatchedByDo[(o.doNumber || '').trim().toLowerCase()] || 0) * 100) / 100,
+      'Pending Qty': Math.round(getRemainingQty(o) * 100) / 100,
+      'Total PO Value': o.totalPoValue,
+    }));
+  };
+
   const handleOpenModal = (orderOrGroup) => {
     const rows = Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup];
     setActiveGroup(rows);
@@ -349,14 +377,17 @@ export default function DispatchPlanningPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => fetchAllData(true)}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Dispatch Planning" />
+            <button
+              onClick={() => fetchAllData(true)}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* ── Alerts ───────────────────────────────────────────────────── */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import { getSidebarPages } from '../config/navPages';
 import {
   Users,
@@ -108,6 +109,13 @@ export default function ManageUsersPage() {
       return matchesRole && matchesSearch;
     });
   }, [users, searchQuery, roleFilter]);
+
+  const buildExportRows = () => filteredUsers.map((u) => ({
+    'User Name': u.username,
+    'Role': u.role,
+    'Firm Access': u.firmAccess,
+    'Page Permissions': u.pagePermissions,
+  }));
 
   // Handle opening Add Modal
   const handleOpenAdd = () => {
@@ -290,6 +298,7 @@ export default function ManageUsersPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <ExportButton getRows={buildExportRows} filename="Users" />
             <button
               type="button"
               onClick={() => fetchUsers(true)}

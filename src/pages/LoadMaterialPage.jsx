@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import FileUploader from '../components/common/FileUploader';
 import {
   Search,
@@ -163,6 +164,21 @@ export default function LoadMaterialPage() {
   const pendingCount = useMemo(() => batches.filter((b) => !isBatchLoaded(b)).length, [batches]);
   const completedCount = useMemo(() => batches.filter((b) => isBatchLoaded(b)).length, [batches]);
 
+  const buildExportRows = () => filteredBatches.flatMap((batch) =>
+    batch.entries.map((e) => ({
+      'DO-Delivery Order No.': e.doNumber,
+      'Party PO No': e.partyPoNo,
+      'Party Names': e.partyNames,
+      'Product Name': e.productName,
+      'Qty': e.qtyToBeDispatched,
+      'LGST No.': e.lgstNo,
+      'Transporter': e.transporterName,
+      'Load Image 1': e.loadImage1,
+      'Load Image 2': e.loadImage2,
+      'Status': e.loadActual ? 'Loaded' : 'Pending',
+    }))
+  );
+
   const handleOpenModal = (batch) => {
     setActiveBatch(batch);
     setLoadImage1('');
@@ -240,14 +256,17 @@ export default function LoadMaterialPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => fetchAllData(true)}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Load Material" />
+            <button
+              onClick={() => fetchAllData(true)}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {successNotice && (

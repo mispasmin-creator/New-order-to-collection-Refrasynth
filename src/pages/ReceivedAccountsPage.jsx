@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   RefreshCw,
@@ -119,6 +120,18 @@ export default function ReceivedAccountsPage() {
     [eligibleOrders]
   );
 
+  const buildExportRows = () => filteredOrders.map((o) => ({
+    'Timestamp': api.formatDate(o.timestamp),
+    'DO-Delivery Order No.': o.doNumber,
+    'Party PO No': o.partyPoNo,
+    'Party Names': o.partyNames,
+    'Product Name': o.productName,
+    'Quantity': o.quantity,
+    'Total PO Value': o.totalPoValue,
+    'PO Date': api.formatDate(o.partyPoDate),
+    'Status': o.actual2 ? 'Done' : 'Pending',
+  }));
+
   // Open modal — accepts a single order or a group of orders sharing one PO
   const handleOpenModal = (orderOrGroup) => {
     const rows = Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup];
@@ -202,14 +215,17 @@ export default function ReceivedAccountsPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => fetchOrders(true)}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Received Accounts" />
+            <button
+              onClick={() => fetchOrders(true)}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* ── Alerts ───────────────────────────────────────────────────── */}

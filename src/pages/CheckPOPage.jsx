@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   Filter,
@@ -116,6 +117,19 @@ export default function CheckPOPage() {
     return groups;
   }, [filteredOrders]);
 
+  const buildExportRows = () => filteredOrders.map((o) => ({
+    'Timestamp': api.formatDate(o.timestamp),
+    'DO-Delivery Order No.': o.doNumber,
+    'Party PO No': o.partyPoNo,
+    'Party PO Date': api.formatDate(o.partyPoDate),
+    'Party Names': o.partyNames,
+    'Product Name': o.productName,
+    'Quantity': o.quantity,
+    'Total PO Value': o.totalPoValue,
+    'Status': o.status1 || 'Pending',
+    'Remark': o.remark1,
+  }));
+
   // Open View Modal — accepts a single order or a group of orders sharing one PO
   const handleOpenView = (orderOrGroup) => {
     setViewGroup(Array.isArray(orderOrGroup) ? orderOrGroup : [orderOrGroup]);
@@ -214,6 +228,7 @@ export default function CheckPOPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Check PO" />
             <button
               type="button"
               onClick={() => fetchOrders(true)}

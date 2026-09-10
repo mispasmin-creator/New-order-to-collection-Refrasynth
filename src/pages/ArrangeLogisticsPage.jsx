@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import FileUploader from '../components/common/FileUploader';
 import {
   Search,
@@ -292,6 +293,36 @@ export default function ArrangeLogisticsPage() {
 
   // Open modal for a batch (one shipment — may cover several products/DOs).
   // Every not-yet-arranged product in the batch is arranged together, no picking needed.
+  const buildExportRows = () => {
+    if (statusTab === 'History') {
+      return historyBatches.flatMap((batch) =>
+        batch.entries.map((e) => ({
+          'Timestamp': e.timestamp,
+          'DO-Delivery Order No.': e.doNumber,
+          'Party PO No': e.partyPoNumber || orderByDoNumber[(e.doNumber || '').trim().toLowerCase()]?.partyPoNo,
+          'Party Names': e.partyName || orderByDoNumber[(e.doNumber || '').trim().toLowerCase()]?.partyNames,
+          'Product Name': e.productName,
+          'Type Of Transporting': e.typeOfTransporting,
+          'LGST-Sr Number': e.lgstNo,
+          'Transporter Name': e.transporterName,
+          'Truck No.': e.truckNo,
+        }))
+      );
+    }
+    return filteredBatches.flatMap((batch) =>
+      batch.entries.map((e) => ({
+        'DO-Delivery Order No.': e.doNumber,
+        'Party PO No': e.partyPoNo,
+        'Party Names': e.partyNames,
+        'Product Name': e.productName,
+        'Qty Dispatched': e.qtyToBeDispatched,
+        'Type Of Transporting': e.typeOfTransporting,
+        'Date Of Dispatch': e.dateOfDispatch,
+        'Status': 'Pending',
+      }))
+    );
+  };
+
   const handleOpenModal = (batch) => {
     setActiveBatch(batch);
     setTransporters([emptyTransporter()]);
@@ -425,17 +456,20 @@ export default function ArrangeLogisticsPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              fetchAllData(true);
-              fetchMaster();
-            }}
-            disabled={syncing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Refresh'}
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Arrange Logistics" />
+            <button
+              onClick={() => {
+                fetchAllData(true);
+                fetchMaster();
+              }}
+              disabled={syncing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* ── Alerts ───────────────────────────────────────────────────── */}

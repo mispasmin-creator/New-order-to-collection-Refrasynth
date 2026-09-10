@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import Modal from '../components/common/Modal';
 import SearchableSelect from '../components/common/SearchableSelect';
 import FileUploader from '../components/common/FileUploader';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   Plus,
@@ -352,6 +353,22 @@ export default function OrdersPage() {
   const getPendingQty = (order) =>
     Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order) - getCancelledQty(order));
 
+  // Export respects whatever search/category filter is currently applied
+  const buildExportRows = () => filteredOrders.map((o) => ({
+    'Timestamp': api.formatDate(o.timestamp),
+    'DO-Delivery Order No.': o.doNumber,
+    'Party PO No': o.partyPoNo,
+    'Party PO Date': api.formatDate(o.partyPoDate),
+    'Party Names': o.partyNames,
+    'Product Name': o.productName,
+    'Order Qty': o.quantity,
+    'Dispatched Qty': Math.round(getDispatchedQty(o) * 100) / 100,
+    'Pending Qty': Math.round(getPendingQty(o) * 100) / 100,
+    'Order Cancel Qty': Math.round(getCancelledQty(o) * 100) / 100,
+    'Total PO Value': o.totalPoValue,
+    'Sales Person': o.salesPersonName,
+  }));
+
   // Dropdown Options strictly synchronized with Google Sheet Master tab
   const firmOptions = useMemo(() => {
     const masterFirms = getMasterOptions(['Firm Name', 'FirmName', 'Firm'], []);
@@ -614,6 +631,8 @@ export default function OrdersPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <ExportButton getRows={buildExportRows} filename="Orders" />
+
             <button
               type="button"
               onClick={() => fetchOrders(true)}

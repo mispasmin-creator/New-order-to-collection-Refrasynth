@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   RefreshCw,
@@ -152,6 +153,17 @@ export default function OrderCancelPage() {
     dispatchedByLineKey[`${(line.doNumber || '').trim().toLowerCase()}|${(line.productName || '').trim().toLowerCase()}`] || 0;
   const getPendingQty = (line) => Math.max(0, (Number(line.quantity) || 0) - getDispatchedQty(line));
 
+  const buildExportRows = () => filteredEntries.map((e) => ({
+    'Cancel No.': e.cancelNo,
+    'Timestamp': e.timestamp,
+    'DO-Delivery Order No.': e.doNumber,
+    'Party Names': e.partyNames,
+    'Product Name': e.productName,
+    'Qty': e.qty,
+    'Reason': e.reason,
+    'Status': e.status || 'Pending Approval',
+  }));
+
   const handleOpenRequest = () => {
     setForm(emptyForm());
     setIsRequestOpen(true);
@@ -279,6 +291,7 @@ export default function OrderCancelPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Order Cancel" />
             <button
               onClick={() => fetchAllData(true)}
               disabled={syncing}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import Modal from '../components/common/Modal';
 import FileUploader from '../components/common/FileUploader';
+import ExportButton from '../components/common/ExportButton';
 import {
   Search,
   RefreshCw,
@@ -171,6 +172,17 @@ export default function MaterialReturnPage() {
     () => orderLineOptions.find((o) => o.orderKey === form.orderKey) || null,
     [orderLineOptions, form.orderKey]
   );
+
+  const buildExportRows = () => filteredEntries.map((e) => ({
+    'Return No.': e.returnNo,
+    'Timestamp': e.timestamp,
+    'DO-Delivery Order No.': e.doNumber,
+    'Party Names': e.partyNames,
+    'Product Name': e.productName,
+    'Qty': e.qty,
+    'Reason': e.reason,
+    'Status': getStage(e) === 0 ? 'Completed' : STAGE_META[getStage(e)].label,
+  }));
 
   const handleOpenRequest = () => {
     setForm(emptyRequestForm());
@@ -429,6 +441,7 @@ export default function MaterialReturnPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <ExportButton getRows={buildExportRows} filename="Material Return" />
             <button
               onClick={() => fetchAllData(true)}
               disabled={syncing}
