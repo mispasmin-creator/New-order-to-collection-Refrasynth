@@ -20,6 +20,9 @@ import {
   Trophy,
   AlertCircle,
   CalendarDays,
+  Ban,
+  RotateCcw,
+  Percent,
 } from 'lucide-react';
 
 const fmtQty = (n) => {
@@ -45,6 +48,8 @@ export default function DashboardPage() {
   const [orders, setOrders]                 = useState([]);
   const [dispatchEntries, setDispatchEntries] = useState([]);
   const [billingEntries, setBillingEntries]   = useState([]);
+  const [orderCancelEntries, setOrderCancelEntries] = useState([]);
+  const [materialReturnEntries, setMaterialReturnEntries] = useState([]);
   const [loading, setLoading]               = useState(true);
   const [syncing, setSyncing]               = useState(false);
 
@@ -53,10 +58,12 @@ export default function DashboardPage() {
     else setLoading(true);
 
     try {
-      const [ordersRes, dispatchRes, billingRes] = await Promise.all([
+      const [ordersRes, dispatchRes, billingRes, cancelRes, returnRes] = await Promise.all([
         api.getOrders(),
         api.getDispatchEntries(),
         api.getLogisticsEntries(),
+        api.getOrderCancelEntries(),
+        api.getMaterialReturnEntries(),
       ]);
       if (ordersRes && ordersRes.success && Array.isArray(ordersRes.data)) {
         setOrders(ordersRes.data);
@@ -66,6 +73,12 @@ export default function DashboardPage() {
       }
       if (billingRes && billingRes.success && Array.isArray(billingRes.data)) {
         setBillingEntries(billingRes.data);
+      }
+      if (cancelRes && cancelRes.success && Array.isArray(cancelRes.data)) {
+        setOrderCancelEntries(cancelRes.data);
+      }
+      if (returnRes && returnRes.success && Array.isArray(returnRes.data)) {
+        setMaterialReturnEntries(returnRes.data);
       }
     } catch (err) {
       console.error('Error loading dashboard data', err);
@@ -93,10 +106,18 @@ export default function DashboardPage() {
   }, [dispatchEntries]);
 
   const arrangedCount = useMemo(() => billingEntries.filter((e) => e.lgstNo).length, [billingEntries]);
+  const loadDoneCount = useMemo(() => billingEntries.filter((e) => e.loadActual).length, [billingEntries]);
+  const weighmentDoneCount = useMemo(() => billingEntries.filter((e) => e.weighmentActual).length, [billingEntries]);
   const invoicedCount = useMemo(() => billingEntries.filter((e) => e.invoiceActual).length, [billingEntries]);
+  const salesForm3Count = useMemo(() => billingEntries.filter((e) => e.salesFormActual).length, [billingEntries]);
+  const biltyEntryCount = useMemo(() => billingEntries.filter((e) => e.biltyEntryActual).length, [billingEntries]);
+  const tcSentCount = useMemo(() => billingEntries.filter((e) => e.tcActual).length, [billingEntries]);
+  const partyReportCount = useMemo(() => billingEntries.filter((e) => e.reportActual).length, [billingEntries]);
   const kittingDoneCount = useMemo(() => billingEntries.filter((e) => e.kittingActual).length, [billingEntries]);
 
-  // Whole order-to-collection pipeline, in the real sequence this app implements
+  // Whole order-to-collection pipeline, in the real sequence this app implements —
+  // every stage from order creation through Full Kitting, so a Boss can see
+  // exactly where every order currently stands, not just a simplified summary.
   const pipeline = useMemo(() => {
     const checkPoApproved = orders.filter((o) => o.status1 === 'Approved').length;
     const accountsReceived = orders.filter((o) => Boolean(o.actual2)).length;
@@ -108,12 +129,21 @@ export default function DashboardPage() {
       { label: 'Check PO Approved', count: checkPoApproved, color: 'bg-indigo-500', to: '/check-po' },
       { label: 'Accounts Received', count: accountsReceived, color: 'bg-violet-500', to: '/received-accounts' },
       { label: 'Delivery Checked', count: deliveryChecked, color: 'bg-blue-500', to: '/check-for-delivery' },
-      { label: 'Dispatched', count: dispatched, color: 'bg-amber-500', to: '/dispatch-planning' },
+      { label: 'Dispatched', count: dispatched, color: 'bg-sky-500', to: '/dispatch-planning' },
       { label: 'Logistics Arranged', count: arrangedCount, color: 'bg-orange-500', to: '/arrange-logistics' },
+      { label: 'Load Material Done', count: loadDoneCount, color: 'bg-amber-500', to: '/load-material' },
+      { label: 'Weighment Done', count: weighmentDoneCount, color: 'bg-yellow-500', to: '/weighment-entry' },
       { label: 'Invoiced', count: invoicedCount, color: 'bg-teal-500', to: '/make-invoice' },
+      { label: 'Sales Form 3 Done', count: salesForm3Count, color: 'bg-cyan-500', to: '/sales-form-3' },
+      { label: 'Bilty Entry Done', count: biltyEntryCount, color: 'bg-purple-500', to: '/entry-in-bilty' },
+      { label: 'Test Certificate Sent', count: tcSentCount, color: 'bg-fuchsia-500', to: '/make-send-test-certificate' },
+      { label: 'Party Report Received', count: partyReportCount, color: 'bg-pink-500', to: '/party-get-report' },
       { label: 'Full Kitting Done', count: kittingDoneCount, color: 'bg-emerald-500', to: '/full-kitting' },
     ];
-  }, [orders, dispatchedDoSet, arrangedCount, invoicedCount, kittingDoneCount, totalOrders]);
+  }, [
+    orders, dispatchedDoSet, arrangedCount, loadDoneCount, weighmentDoneCount, invoicedCount,
+    salesForm3Count, biltyEntryCount, tcSentCount, partyReportCount, kittingDoneCount, totalOrders,
+  ]);
 
   const checkPoPendingCount = useMemo(() => orders.filter((o) => !o.status1).length, [orders]);
   const maxPipelineCount = Math.max(1, ...pipeline.map((p) => p.count));
@@ -183,6 +213,47 @@ export default function DashboardPage() {
     [orders, kittingDoneDoSet]
   );
 
+  // Order Cancel — Approved cancellations reduce the business's realizable
+  // value; value estimated via the cancelled qty against the order's own rate.
+  const orderByDoNumber = useMemo(() => {
+    const map = {};
+    orders.forEach((o) => {
+      const key = (o.doNumber || '').trim().toLowerCase();
+      if (key) map[key] = o;
+    });
+    return map;
+  }, [orders]);
+
+  const approvedCancellations = useMemo(
+    () => orderCancelEntries.filter((e) => e.status === 'Approved'),
+    [orderCancelEntries]
+  );
+  const cancelledValue = useMemo(
+    () => approvedCancellations.reduce((sum, e) => {
+      const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
+      return sum + (Number(e.qty) || 0) * (Number(order?.rateOfMaterial) || 0);
+    }, 0),
+    [approvedCancellations, orderByDoNumber]
+  );
+  const pendingCancelCount = useMemo(
+    () => orderCancelEntries.filter((e) => !e.actual && !e.status).length,
+    [orderCancelEntries]
+  );
+
+  // Material Return — every request's own Rate Of Material is captured at
+  // request time, so its value doesn't need an order cross-reference.
+  const materialReturnValue = useMemo(
+    () => materialReturnEntries.reduce((sum, e) => sum + (Number(e.qty) || 0) * (Number(e.rateOfMaterial) || 0), 0),
+    [materialReturnEntries]
+  );
+  const materialReturnInProgressCount = useMemo(
+    () => materialReturnEntries.filter((e) => !e.actual4).length,
+    [materialReturnEntries]
+  );
+
+  const netRealizableValue = totalPoValue - cancelledValue - materialReturnValue;
+  const kittingCompletionPct = totalOrders ? Math.round((kittingDoneCount / totalOrders) * 100) : 0;
+
   const recentOrders = useMemo(() => {
     return [...orders]
       .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
@@ -217,7 +288,7 @@ export default function DashboardPage() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 shadow-2xs transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-indigo-600' : 'text-slate-500'}`} />
-            <span>{syncing ? 'Refreshing...' : 'Refresh Sheet Data'}</span>
+            <span>{syncing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
 
           <Link
@@ -271,6 +342,74 @@ export default function DashboardPage() {
           icon={PackageCheck}
           iconBg="bg-emerald-50 text-emerald-600"
         />
+      </div>
+
+      {/* Business Health — Cancellations, Returns, Net Value, Completion Rate */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <StatCard
+          title="Order Cancellations"
+          value={loading ? '...' : approvedCancellations.length}
+          subtitle={`₹${cancelledValue.toLocaleString('en-IN')} value${pendingCancelCount ? ` • ${pendingCancelCount} pending approval` : ''}`}
+          icon={Ban}
+          iconBg="bg-rose-50 text-rose-600"
+        />
+
+        <StatCard
+          title="Material Returns"
+          value={loading ? '...' : materialReturnEntries.length}
+          subtitle={`₹${materialReturnValue.toLocaleString('en-IN')} value${materialReturnInProgressCount ? ` • ${materialReturnInProgressCount} in progress` : ''}`}
+          icon={RotateCcw}
+          iconBg="bg-orange-50 text-orange-600"
+        />
+
+        <StatCard
+          title="Net Realizable Value"
+          value={loading ? '...' : `₹${(netRealizableValue / 100000).toFixed(2)} L`}
+          subtitle="PO Value − Cancelled − Returned"
+          icon={IndianRupee}
+          iconBg="bg-emerald-50 text-emerald-600"
+        />
+
+        <StatCard
+          title="Kitting Completion"
+          value={loading ? '...' : `${kittingCompletionPct}%`}
+          subtitle={`${kittingDoneCount} of ${totalOrders} orders fully closed`}
+          icon={Percent}
+          iconBg="bg-indigo-50 text-indigo-600"
+        />
+      </div>
+
+      {/* Quick Navigation — jump straight into whichever stage needs attention */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp className="w-4 h-4 text-indigo-600" />
+          <h3 className="text-sm font-semibold text-slate-800">Quick Navigation</h3>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {[
+            { to: '/check-po', label: 'Check PO', desc: `${checkPoPendingCount} pending`, icon: ClipboardCheck },
+            { to: '/check-for-delivery', label: 'Check for Delivery', desc: 'Confirm stock', icon: Truck },
+            { to: '/arrange-logistics', label: 'Arrange Logistics', desc: `${arrangedCount} arranged`, icon: Boxes },
+            { to: '/make-invoice', label: 'Make Invoice', desc: `${invoicedCount} invoiced`, icon: FileText },
+            { to: '/full-kitting', label: 'Full Kitting', desc: `${kittingDoneCount} done`, icon: PackageCheck },
+            { to: '/order-cancel', label: 'Order Cancel', desc: `${pendingCancelCount} pending`, icon: Ban },
+          ].filter((item) => hasPagePermission(user, item.label)).map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group min-w-[180px] flex-1"
+            >
+              <span className="p-1.5 rounded-lg bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors shrink-0">
+                <item.icon className="w-4 h-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-xs text-slate-800 group-hover:text-indigo-700">{item.label}</div>
+                <p className="text-[11px] text-slate-400 truncate">{item.desc}</p>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* Sales Trend + Top Parties + Pending Orders */}
@@ -397,107 +536,74 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Middle Grid: Pipeline & Quick Nav */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Order-to-Collection Pipeline */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="text-base font-semibold text-slate-800">Order-to-Collection Pipeline</h3>
-              <p className="text-xs text-slate-500 mt-0.5">How many orders have reached each stage</p>
-            </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-              Live Tracker
-            </span>
+      {/* Order-to-Collection Pipeline — every stage, full width */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">Order-to-Collection Pipeline</h3>
+            <p className="text-xs text-slate-500 mt-0.5">How many orders have reached each stage — click any stage to jump straight in</p>
           </div>
-
-          <div className="space-y-4">
-            {pipeline.map((stage) => {
-              const pct = Math.round((stage.count / maxPipelineCount) * 100);
-              return (
-                <Link key={stage.label} to={stage.to} className="block group">
-                  <div className="flex items-center justify-between text-xs font-medium mb-1.5">
-                    <span className="text-slate-700 flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
-                      <span className={`w-2.5 h-2.5 rounded-full ${stage.color}`} />
-                      {stage.label}
-                    </span>
-                    <span className="text-slate-500">
-                      <strong className="text-slate-800">{stage.count}</strong>
-                    </span>
-                  </div>
-                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${stage.color}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Quick summary highlights */}
-          <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-3 gap-4 text-center">
-            <div className="p-3 rounded-lg bg-slate-50">
-              <div className="text-xs text-slate-500 font-medium">Avg PO Value</div>
-              <div className="text-sm font-bold text-slate-800 mt-0.5">
-                ₹{totalOrders ? Math.round(totalPoValue / totalOrders).toLocaleString('en-IN') : 0}
-              </div>
-            </div>
-            <div className="p-3 rounded-lg bg-slate-50">
-              <div className="text-xs text-slate-500 font-medium">Logistics Arranged</div>
-              <div className="text-sm font-bold text-orange-600 mt-0.5">
-                {arrangedCount} shipments
-              </div>
-            </div>
-            <div className="p-3 rounded-lg bg-slate-50">
-              <div className="text-xs text-slate-500 font-medium">Invoiced</div>
-              <div className="text-sm font-bold text-teal-600 mt-0.5">
-                {invoicedCount} shipments
-              </div>
-            </div>
-          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+            Live Tracker
+          </span>
         </div>
 
-        {/* Quick Actions & System Info */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-indigo-600 mb-2">
-              <TrendingUp className="w-5 h-5" />
-              <h3 className="text-base font-semibold text-slate-800">Quick Navigation</h3>
-            </div>
-            <p className="text-xs text-slate-500 mb-5">
-              Jump straight into the stage that needs attention
-            </p>
-
-            <div className="space-y-2.5">
-              {[
-                { to: '/check-po', label: 'Check PO', desc: `${checkPoPendingCount} pending approval`, icon: ClipboardCheck },
-                { to: '/check-for-delivery', label: 'Check for Delivery', desc: 'Confirm stock before dispatch', icon: Truck },
-                { to: '/arrange-logistics', label: 'Arrange Logistics', desc: `${arrangedCount} shipments arranged`, icon: Boxes },
-                { to: '/make-invoice', label: 'Make Invoice', desc: `${invoicedCount} invoiced`, icon: FileText },
-              ].filter((item) => hasPagePermission(user, item.label)).map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors group"
-                >
-                  <span className="p-1.5 rounded-lg bg-slate-100 text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors shrink-0">
-                    <item.icon className="w-4 h-4" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          {pipeline.map((stage) => {
+            const pct = Math.round((stage.count / maxPipelineCount) * 100);
+            return (
+              <Link key={stage.label} to={stage.to} className="block group">
+                <div className="flex items-center justify-between text-xs font-medium mb-1.5">
+                  <span className="text-slate-700 flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${stage.color}`} />
+                    {stage.label}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-xs text-slate-800 group-hover:text-indigo-700">{item.label}</div>
-                    <p className="text-[11px] text-slate-400 truncate">{item.desc}</p>
-                  </div>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all shrink-0" />
-                </Link>
-              ))}
+                  <span className="text-slate-500">
+                    <strong className="text-slate-800">{stage.count}</strong>
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${stage.color}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Quick summary highlights */}
+        <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
+          <div className="p-3 rounded-lg bg-slate-50">
+            <div className="text-xs text-slate-500 font-medium">Avg PO Value</div>
+            <div className="text-sm font-bold text-slate-800 mt-0.5">
+              ₹{totalOrders ? Math.round(totalPoValue / totalOrders).toLocaleString('en-IN') : 0}
             </div>
           </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-100 text-xs text-slate-400 flex items-center justify-between">
-            <span>Refrasynth O2C Portal</span>
-            <span>Version 2.0</span>
+          <div className="p-3 rounded-lg bg-slate-50">
+            <div className="text-xs text-slate-500 font-medium">Logistics Arranged</div>
+            <div className="text-sm font-bold text-orange-600 mt-0.5">
+              {arrangedCount} shipments
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50">
+            <div className="text-xs text-slate-500 font-medium">Invoiced</div>
+            <div className="text-sm font-bold text-teal-600 mt-0.5">
+              {invoicedCount} shipments
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50">
+            <div className="text-xs text-slate-500 font-medium">Cancelled</div>
+            <div className="text-sm font-bold text-rose-600 mt-0.5">
+              {approvedCancellations.length} orders
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50">
+            <div className="text-xs text-slate-500 font-medium">Returned</div>
+            <div className="text-sm font-bold text-orange-600 mt-0.5">
+              {materialReturnEntries.length} requests
+            </div>
           </div>
         </div>
       </div>
@@ -571,6 +677,10 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="pb-2 text-center text-[11px] text-slate-400">
+        Order To Collection Portal • Live data synced from Google Sheets
       </div>
     </div>
   );
