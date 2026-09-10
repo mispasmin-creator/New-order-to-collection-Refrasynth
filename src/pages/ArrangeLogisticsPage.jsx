@@ -200,20 +200,15 @@ export default function ArrangeLogisticsPage() {
       .filter(Boolean);
   }, [dispatchEntries, orderByDoNumber]);
 
-  // Group dispatch entries into shipment batches: same PO + same transport type +
-  // same dispatch date = one shipment that needs one logistics arrangement.
-  // Two separate "Dispatch PO" submissions (even for the same PO) produce two batches.
+  // Group dispatch entries into shipment batches by the exact Timestamp every
+  // entry in one "Dispatch PO" submission shares — the real action boundary.
+  // Two separate Dispatch Planning submissions must never merge here just
+  // because they happen to share the same PO/party/transport type/date.
   const batches = useMemo(() => {
     const groups = [];
     const indexByKey = {};
     enrichedDispatchEntries.forEach((entry) => {
-      const key = [
-        String(entry.partyPoNo ?? '').trim().toLowerCase(),
-        String(entry.partyPoDate ?? '').trim(),
-        String(entry.partyNames ?? '').trim().toLowerCase(),
-        String(entry.typeOfTransporting ?? '').trim().toLowerCase(),
-        String(entry.dateOfDispatch ?? '').trim(),
-      ].join('|');
+      const key = String(entry.timestamp ?? '').trim();
       if (indexByKey[key] === undefined) {
         indexByKey[key] = groups.length;
         groups.push({ key, entries: [entry] });
