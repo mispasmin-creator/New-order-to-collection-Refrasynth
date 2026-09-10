@@ -319,6 +319,11 @@ export default function EntryInBiltyPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Product Name</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Transporter Name</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Truck No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap text-right">Actual Truck Qty</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Bill No.</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Bill Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bilty No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bilty Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
@@ -327,7 +332,7 @@ export default function EntryInBiltyPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="10" className="py-20 text-center text-slate-400">
+                  <td colSpan="15" className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-amber-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading shipments from Google Sheets...
@@ -336,7 +341,7 @@ export default function EntryInBiltyPage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="py-16 text-center text-slate-400">
+                  <td colSpan="15" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -356,6 +361,8 @@ export default function EntryInBiltyPage() {
                   const productNames = batch.entries.map((e) => e.productName).filter(Boolean);
                   const totalQty = batch.entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
                   const lgstNos = [...new Set(batch.entries.map((e) => e.lgstNo).filter(Boolean))];
+                  const billNos = [...new Set(batch.entries.map((e) => e.billNo).filter(Boolean))];
+                  const billCopyUrl = batch.entries.map((e) => e.billCopy).find(Boolean);
                   const done = isBatchDone(batch);
 
                   return (
@@ -416,6 +423,23 @@ export default function EntryInBiltyPage() {
                             </span>
                           ))}
                         </div>
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.transporterName || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {primary.truckNo || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-right text-slate-700">
+                        {primary.actualTruckQty || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
+                        {billNos.join(', ') || '—'}
+                      </td>
+                      <td className="px-3.5 py-3 whitespace-nowrap">
+                        {billCopyUrl ? (
+                          <a href={billCopyUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline">View</a>
+                        ) : '—'}
                       </td>
                       <td className="px-3.5 py-3 whitespace-nowrap text-slate-700">
                         {primary.biltyEntryNo || '—'}
