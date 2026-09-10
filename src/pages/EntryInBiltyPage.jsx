@@ -124,11 +124,13 @@ export default function EntryInBiltyPage() {
     const groups = [];
     const indexByKey = {};
     enrichedBillingEntries.forEach((entry) => {
-      // Group strictly by the LGST batch number assigned during Arrange
-      // Logistics — that's the real shipment boundary. Two separate
-      // Arrange Logistics submissions must never re-merge here just
-      // because they happen to share the same PO/party/transport/date.
-      const key = String(entry.lgstNo ?? '').trim().toLowerCase();
+      // From this stage onward, Bill No. is the real shipment boundary — if
+      // several LGST batches were invoiced together under one bill, they
+      // travel on one bilty and should be actioned together here. Fall back
+      // to LGST No. only for the rare entry with no bill number yet.
+      const key = entry.billNo
+        ? `bill:${String(entry.billNo).trim().toLowerCase()}`
+        : `lgst:${String(entry.lgstNo ?? '').trim().toLowerCase()}`;
       if (indexByKey[key] === undefined) {
         indexByKey[key] = groups.length;
         groups.push({ key, entries: [entry] });

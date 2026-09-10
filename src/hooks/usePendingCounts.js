@@ -44,6 +44,27 @@ function groupByLgstNo(entries) {
   return groups;
 }
 
+// Groups Billing entries by Bill No. once one's been assigned (falling back to
+// LGST No. otherwise) — the real shipment boundary from Make Invoice onward,
+// since several LGST batches invoiced together under one bill travel on one
+// bilty and are actioned together on every page from Sales Form 3 onward.
+function groupByBillOrLgst(entries) {
+  const groups = [];
+  const indexByKey = {};
+  entries.forEach((entry) => {
+    const key = entry.billNo
+      ? `bill:${String(entry.billNo).trim().toLowerCase()}`
+      : `lgst:${String(entry.lgstNo ?? '').trim().toLowerCase()}`;
+    if (indexByKey[key] === undefined) {
+      indexByKey[key] = groups.length;
+      groups.push([entry]);
+    } else {
+      groups[indexByKey[key]].push(entry);
+    }
+  });
+  return groups;
+}
+
 // Refetch interval — the sidebar badges only need to be roughly fresh, and this
 // backend has a real rate limit, so keep this well above "poll aggressively".
 const REFRESH_MS = 120000;
@@ -142,11 +163,11 @@ export default function usePendingCounts() {
         loadMaterial: groupByLgstNo(enrichBilling((e) => e.lgstNo)),
         weighmentEntry: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.loadActual)),
         makeInvoice: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.weighmentActual)),
-        salesForm3: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.invoiceActual)),
-        entryInBilty: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
-        sendTestCertificate: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
-        partyGetReport: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.tcActual)),
-        fullKitting: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.reportActual)),
+        salesForm3: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.invoiceActual)),
+        entryInBilty: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
+        sendTestCertificate: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
+        partyGetReport: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.tcActual)),
+        fullKitting: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.reportActual)),
       };
       const countPending = (batches, doneField) =>
         batches.filter((batch) => !batch.every((e) => Boolean(e[doneField]))).length;
