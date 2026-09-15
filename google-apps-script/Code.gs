@@ -10,6 +10,20 @@ function getSpreadsheet() {
     return cachedSpreadsheet;
 }
 
+// Every timestamp in this app is written as a dd/MM/yyyy string (e.g. "10/09/2026 14:32:10"
+// for 10 September). Sheets auto-detects such strings as dates on setValue() and re-parses
+// them using the spreadsheet's locale — for a US locale that means MM/dd, so any day <= 12
+// silently flips month and day (10/09 "10 Sep" becomes "Oct 9"). Forcing a leading apostrophe
+// makes Sheets store the exact string as text instead, the same way manual entry does.
+function forceTextIfDateLike(value) {
+    if (typeof value !== 'string') return value;
+    var v = value.trim();
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}(\s+\d{1,2}:\d{2}(:\d{2})?)?$/.test(v)) {
+        return "'" + value;
+    }
+    return value;
+}
+
 function doGet(e) {
     var params = (e && e.parameter) ? e.parameter : {};
     var action = params.action;
@@ -202,7 +216,7 @@ function doPost(e) {
                 if (!dataObj.hasOwnProperty(key)) continue;
                 var colIdx = colMap[key.toLowerCase()];
                 if (colIdx) {
-                    sheet.getRange(targetRow, colIdx).setValue(dataObj[key]);
+                    sheet.getRange(targetRow, colIdx).setValue(forceTextIfDateLike(dataObj[key]));
                     written++;
                 }
             }
@@ -280,7 +294,7 @@ function doPost(e) {
                     if (!updateObj.hasOwnProperty(key)) continue;
                     var colIdx = colMap[key.toLowerCase()] || cleanColMap[key.toLowerCase().replace(/[^a-z0-9]/g, '')];
                     if (colIdx) {
-                        sheet.getRange(rowIndex, colIdx).setValue(updateObj[key]);
+                        sheet.getRange(rowIndex, colIdx).setValue(forceTextIfDateLike(updateObj[key]));
                         updatedCount++;
                     }
                 }
@@ -297,7 +311,8 @@ function doPost(e) {
             var rowData = JSON.parse(params.rowData || '[]');
             var existingData = sheet.getRange(rowIndex, 1, 1, rowData.length).getValues()[0];
             var mergedData = existingData.map(function (existingVal, i) {
-                return (rowData[i] !== '' && rowData[i] !== undefined) ? rowData[i] : existingVal;
+                var newVal = (rowData[i] !== '' && rowData[i] !== undefined) ? rowData[i] : existingVal;
+                return forceTextIfDateLike(newVal);
             });
             sheet.getRange(rowIndex, 1, 1, mergedData.length).setValues([mergedData]);
 
@@ -315,7 +330,7 @@ function doPost(e) {
                 throw new Error("Invalid row or column index for update");
             }
 
-            sheet.getRange(rowIndex, columnIndex).setValue(value);
+            sheet.getRange(rowIndex, columnIndex).setValue(forceTextIfDateLike(value));
             SpreadsheetApp.flush();
 
             return jsonSuccess("Cell updated successfully");
