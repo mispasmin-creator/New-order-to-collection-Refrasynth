@@ -654,13 +654,13 @@ export default function ManageUsersPage() {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Password *
+              New Password
             </label>
             <input
               type="text"
-              required
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="Leave blank to keep the current password"
               className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

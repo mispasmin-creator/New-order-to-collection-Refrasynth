@@ -2,16 +2,15 @@ import React, { useRef, useState } from 'react';
 import { Upload, X, ExternalLink, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '../../services/api';
 
-const DRIVE_FOLDER_ID = '1iGeJSI9CZpmaCyUnpx1QoDJNOXr_Jd2L';
-const MAX_SIZE_MB = 20;
+const MAX_SIZE_MB = 10;
 
 /**
  * FileUploader — Drag & drop / click-to-browse file upload widget.
  *
  * Props:
  *   label        {string}   — Field label shown above the widget.
- *   value        {string}   — Current Drive URL (shows a link when set).
- *   onChange     {function} — Called with the Drive URL string after upload.
+ *   value        {string}   — Current file URL (shows a link when set).
+ *   onChange     {function} — Called with the file URL string after upload.
  *   accept       {string}   — MIME types to accept (default: all).
  *   required     {boolean}  — Marks the field as required.
  */
@@ -40,11 +39,11 @@ export default function FileUploader({
     setUploading(true);
 
     try {
-      const driveUrl = await api.uploadFile(file, DRIVE_FOLDER_ID);
+      const driveUrl = await api.uploadFile(file);
       if (driveUrl) {
         onChange(driveUrl);
       } else {
-        setError('Upload failed. Please try again or paste a Drive URL manually.');
+        setError('Upload failed. Please try again or paste a file link manually.');
       }
     } catch (err) {
       console.error('FileUploader error:', err);
@@ -130,7 +129,7 @@ export default function FileUploader({
           {uploading ? (
             <>
               <Loader2 className="w-7 h-7 text-indigo-500 animate-spin" />
-              <p className="text-xs font-medium text-indigo-600">Uploading to Google Drive…</p>
+              <p className="text-xs font-medium text-indigo-600">Uploading…</p>
             </>
           ) : (
             <>
@@ -139,7 +138,7 @@ export default function FileUploader({
                 Drag & drop file here, or{' '}
                 <span className="text-indigo-600 underline">browse</span>
               </p>
-              <p className="text-[10px] text-slate-400">Any file • Max {MAX_SIZE_MB} MB</p>
+              <p className="text-[10px] text-slate-400">Images & PDF • Max {MAX_SIZE_MB} MB</p>
             </>
           )}
         </div>
@@ -151,7 +150,7 @@ export default function FileUploader({
           type="url"
           value=""
           onChange={(e) => e.target.value && onChange(e.target.value)}
-          placeholder="Or paste Google Drive link directly…"
+          placeholder="Or paste a file link directly…"
           className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 placeholder:text-slate-400"
         />
       )}

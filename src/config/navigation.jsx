@@ -20,6 +20,7 @@ import {
   PackageCheck,
   Ban,
   RotateCcw,
+  Database,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -39,6 +40,7 @@ import FullKittingPage from '../pages/FullKittingPage';
 import OrderCancelPage from '../pages/OrderCancelPage';
 import MaterialReturnPage from '../pages/MaterialReturnPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
+import MasterDataPage from '../pages/MasterDataPage';
 import { navPages } from './navPages';
 
 /**
@@ -67,6 +69,7 @@ export const iconMap = {
   PackageCheck,
   Ban,
   RotateCcw,
+  Database,
 };
 
 // Maps each navPages id to the component that renders it. The id/label/path/
@@ -91,6 +94,7 @@ const componentMap = {
   'full-kitting': FullKittingPage,
   'order-cancel': OrderCancelPage,
   'material-return': MaterialReturnPage,
+  'master-data': MasterDataPage,
   'manage-users': ManageUsersPage,
 };
 

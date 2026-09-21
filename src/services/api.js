@@ -1,12 +1,12 @@
 import {
   getStoredMockOrders,
   saveStoredMockOrders,
-  getStoredMockUsers,
-  getStoredMockMasterData,
 } from './mockData';
 
-const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || '').trim();
-const FORCE_MOCK = import.meta.env.VITE_USE_MOCK === 'true' || !APPS_SCRIPT_URL;
+import { supabase, supabaseConfigured, readSheet, sheetRequest } from './supabaseSheets';
+
+const FORCE_MOCK = import.meta.env.VITE_USE_MOCK === 'true' || !supabaseConfigured;
+const STORAGE_BUCKET = 'All Files';
 
 // Short-lived read cache, keyed by sheet/tab. The sidebar's pending-count
 // poller and whichever page is currently mounted routinely request the same
@@ -196,116 +196,41 @@ function parseMasterSheet(data) {
 }
 
 /**
- * Low-level GET helper for Google Apps Script Web App
+ * Low-level read helper — returns the sheet-shaped 2D array for a table.
  */
 async function getFromAppsScript(sheetName) {
   if (FORCE_MOCK) return null;
-  return cachedRead(`get:${sheetName}`, () => getFromAppsScriptUncached(sheetName));
+  return cachedRead(`get:${sheetName}`, () => readSheet(sheetName));
 }
 
-async function getFromAppsScriptUncached(sheetName) {
+/**
+ * Write/read helper. Same payload contract the app always used, now backed by
+ * Supabase. Any write invalidates the read cache so the next fetch is fresh.
+ */
+async function sendToAppsScript(payload) {
+  if (FORCE_MOCK) return null;
+  if (payload.action !== 'read') readCache.clear();
+  return sheetRequest(payload);
+}
+
+// Admin credentials are kept only for this browser tab (sessionStorage) and are
+// re-sent to the secured user-management functions; passwords are never readable.
+const ADMIN_CREDS_KEY = 'o2c_admin_session';
+
+function getAdminCreds() {
   try {
-    const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheetName)}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
-    }
-
-    const json = await response.json();
-    return json;
-  } catch (error) {
-    console.error(`Error fetching sheet '${sheetName}':`, error);
+    return JSON.parse(sessionStorage.getItem(ADMIN_CREDS_KEY) || 'null');
+  } catch {
     return null;
   }
 }
 
-/**
- * Resilient request helper for Google Apps Script Web App
- * Combines GET query param execution (100% CORS-free), standard POST,
- * and no-cors fallback to ensure changes always write to Google Sheets.
- */
-async function sendToAppsScript(payload) {
-  if (FORCE_MOCK) return null;
+const ADMIN_EXPIRED = 'Admin session expired. Please sign out and sign in again as Admin.';
 
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(payload)) {
-    params.append(key, typeof value === 'object' ? JSON.stringify(value) : value);
-  }
-
-  // 1. Try GET with query parameters (Zero CORS issues in modern browsers)
-  try {
-    const getUrl = `${APPS_SCRIPT_URL}?${params.toString()}`;
-    const response = await fetch(getUrl, {
-      method: 'GET',
-      redirect: 'follow',
-    });
-
-    if (response.ok) {
-      const json = await response.json();
-      if (json && json.success) {
-        return json;
-      }
-    }
-  } catch (getErr) {
-    console.warn('GET attempt failed, trying POST:', getErr);
-  }
-
-  // 2. Try standard POST with URLSearchParams
-  try {
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      body: params,
-    });
-
-    if (response.ok) {
-      const json = await response.json();
-      if (json && json.success) {
-        return json;
-      }
-    }
-  } catch (postErr) {
-    console.warn('POST attempt failed, trying no-cors fallback:', postErr);
-  }
-
-  // 3. Fallback: POST with mode: 'no-cors'
-  // In no-cors mode, the browser ignores CORS headers and fires the request directly to Google Apps Script.
-  try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: params,
-    });
-    // Brief delay to allow Google Sheets write & flush
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    return { success: true, message: 'Data saved to Google Sheet' };
-  } catch (noCorsErr) {
-    console.error('All request attempts failed:', noCorsErr);
-    return { success: false, error: noCorsErr.message };
-  }
-}
-
-/**
- * In-memory / localStorage fallback for Manage Users when offline
- */
-const MOCK_STORAGE_KEY_USERS_FULL = 'refrasynth_mock_users_full';
-
-function getStoredFullUsers() {
-  const data = localStorage.getItem(MOCK_STORAGE_KEY_USERS_FULL);
-  if (!data) return [];
-  try {
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredFullUsers(users) {
-  localStorage.setItem(MOCK_STORAGE_KEY_USERS_FULL, JSON.stringify(users));
+async function callRpc(fn, args) {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) return { success: false, error: error.message };
+  return { success: true, data };
 }
 
 /**
@@ -315,279 +240,178 @@ export const api = {
   isMockMode: FORCE_MOCK,
 
   // -------------------------------------------------------------
-  // FILE UPLOAD (Google Drive via Apps Script)
-  // All uploaded files go to folder: 1iGeJSI9CZpmaCyUnpx1QoDJNOXr_Jd2L
-  // Returns a direct Google Drive preview URL.
+  // FILE UPLOAD (Supabase Storage, public bucket)
+  // Returns the file's public URL.
   // -------------------------------------------------------------
-  async uploadFile(file, folderId = '1iGeJSI9CZpmaCyUnpx1QoDJNOXr_Jd2L') {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = async (evt) => {
-        try {
-          // Convert ArrayBuffer → base64 string
-          const arrayBuffer = evt.target.result;
-          const bytes = new Uint8Array(arrayBuffer);
-          let binary = '';
-          for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          const base64Data = btoa(binary);
-
-          // Send to Apps Script
-          const params = new URLSearchParams({
-            action: 'uploadFile',
-            base64Data,
-            fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
-            folderId,
-          });
-
-          // Base64 file data can easily exceed URL length limits, so this must
-          // always go through the request body (POST), never a GET query string.
-          let driveUrl = null;
-
-          try {
-            const resp = await fetch(APPS_SCRIPT_URL, {
-              method: 'POST',
-              redirect: 'follow',
-              body: params,
-            });
-            if (resp.ok) {
-              const json = await resp.json();
-              if (json?.success && json?.fileUrl) {
-                driveUrl = json.fileUrl;
-              }
-            }
-          } catch (_) { /* fall through to no-cors fallback */ }
-
-          // Fallback: fire the upload with mode: 'no-cors' so it still reaches
-          // Drive even if the browser blocked the CORS-visible response above.
-          // The response is opaque here, so the Drive URL can't be read back —
-          // the user is prompted to paste it manually via FileUploader's fallback input.
-          if (!driveUrl) {
-            try {
-              await fetch(APPS_SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: params,
-              });
-            } catch (_) { /* give up, resolve(null) below */ }
-          }
-
-          resolve(driveUrl);
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsArrayBuffer(file);
+  async uploadFile(file) {
+    if (!supabase) throw new Error('Supabase is not configured');
+    const safeName = (file.name || 'file').replace(/[^A-Za-z0-9._-]/g, '_');
+    const path = `${new Date().toISOString().slice(0, 10)}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeName}`;
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      cacheControl: '3600',
+      upsert: false,
     });
+    if (error) throw new Error(error.message);
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
   },
 
   // -------------------------------------------------------------
-  // USERS TAB OPERATIONS
+  // USERS (admin-only, via secured database functions)
   // -------------------------------------------------------------
   async getUsers() {
-    if (!FORCE_MOCK) {
-      const res = await getFromAppsScript('Users');
-      if (res && res.success && Array.isArray(res.data)) {
-        // Headers are row 0: ["User Name", "Password", "Role", "Firm Access", "Page Permissions"]
-        const users = [];
-        for (let i = 1; i < res.data.length; i++) {
-          const row = res.data[i];
-          const username = (row[0] || '').toString().trim();
-          if (!username) continue;
-
-          users.push({
-            rowIndex: i + 1, // Sheet row is 1-indexed, so row index is i + 1
-            username: username,
-            password: (row[1] || '').toString(),
-            role: (row[2] || 'Staff').toString(),
-            firmAccess: (row[3] || 'All').toString(),
-            pagePermissions: (row[4] || 'All').toString(),
-          });
-        }
-        return { success: true, data: users };
-      }
-    }
-
-    // Fallback to local storage
-    return { success: true, data: getStoredFullUsers() };
+    const creds = getAdminCreds();
+    if (!creds) return { success: false, error: ADMIN_EXPIRED, data: [] };
+    const res = await callRpc('app_list_users', { p_admin_user: creds.u, p_admin_pass: creds.p });
+    if (!res.success) return { success: false, error: res.error, data: [] };
+    return {
+      success: true,
+      data: (res.data || []).map((u) => ({
+        rowIndex: u.id,
+        username: u.username,
+        password: '',
+        role: u.role,
+        firmAccess: u.firm_access,
+        pagePermissions: u.page_permissions,
+      })),
+    };
   },
 
   async addUser(userData) {
-    const rowData = [
-      userData.username,
-      userData.password,
-      userData.role || 'Staff',
-      userData.firmAccess || 'All',
-      userData.pagePermissions || 'All',
-    ];
-
-    if (!FORCE_MOCK) {
-      const res = await sendToAppsScript({
-        action: 'insert',
-        sheetName: 'Users',
-        rowData: JSON.stringify(rowData),
-      });
-      if (res && res.success) {
-        return { success: true, message: 'User added to Google Sheet successfully!' };
-      }
-      return { success: false, error: res?.error || 'Failed to insert into Google Sheet.' };
-    }
-
-    // Local update
-    const users = getStoredFullUsers();
-    const newUser = {
-      rowIndex: users.length + 2,
-      username: userData.username,
-      password: userData.password,
-      role: userData.role || 'Staff',
-      firmAccess: userData.firmAccess || 'All',
-      pagePermissions: userData.pagePermissions || 'All',
-    };
-    users.push(newUser);
-    saveStoredFullUsers(users);
-    return { success: true, message: 'User added successfully (Local)' };
+    const creds = getAdminCreds();
+    if (!creds) return { success: false, error: ADMIN_EXPIRED };
+    const res = await callRpc('app_add_user', {
+      p_admin_user: creds.u,
+      p_admin_pass: creds.p,
+      p_username: userData.username,
+      p_password: userData.password,
+      p_role: userData.role || 'Staff',
+      p_firm_access: userData.firmAccess || 'All',
+      p_permissions: userData.pagePermissions || 'All',
+    });
+    if (!res.success) return { success: false, error: res.error };
+    return { success: true, message: 'User added successfully!' };
   },
 
   async updateUser(rowIndex, userData) {
-    const rowData = [
-      userData.username,
-      userData.password,
-      userData.role || 'Staff',
-      userData.firmAccess || 'All',
-      userData.pagePermissions || 'All',
-    ];
-
-    if (!FORCE_MOCK) {
-      const res = await sendToAppsScript({
-        action: 'update',
-        sheetName: 'Users',
-        rowIndex: rowIndex,
-        rowData: JSON.stringify(rowData),
-      });
-      if (res && res.success) {
-        return { success: true, message: 'User updated in Google Sheet successfully!' };
-      }
-      return { success: false, error: res?.error || 'Failed to update Google Sheet.' };
-    }
-
-    // Local update
-    const users = getStoredFullUsers();
-    const idx = users.findIndex((u) => u.rowIndex === rowIndex);
-    if (idx !== -1) {
-      users[idx] = { ...users[idx], ...userData };
-      saveStoredFullUsers(users);
-    }
-    return { success: true, message: 'User updated successfully' };
+    const creds = getAdminCreds();
+    if (!creds) return { success: false, error: ADMIN_EXPIRED };
+    const res = await callRpc('app_update_user', {
+      p_admin_user: creds.u,
+      p_admin_pass: creds.p,
+      p_id: rowIndex,
+      p_username: userData.username,
+      p_password: userData.password || '',
+      p_role: userData.role || 'Staff',
+      p_firm_access: userData.firmAccess || 'All',
+      p_permissions: userData.pagePermissions || 'All',
+    });
+    if (!res.success) return { success: false, error: res.error };
+    return { success: true, message: 'User updated successfully!' };
   },
 
   async deleteUser(rowIndex) {
-    if (!FORCE_MOCK) {
-      const res = await sendToAppsScript({
-        action: 'delete',
-        sheetName: 'Users',
-        rowIndex: rowIndex,
-      });
-      if (res && res.success) {
-        return { success: true, message: 'User deleted from Google Sheet successfully!' };
-      }
-      return { success: false, error: res?.error || 'Failed to delete from Google Sheet.' };
-    }
-
-    // Local delete
-    const users = getStoredFullUsers();
-    const filtered = users.filter((u) => u.rowIndex !== rowIndex);
-    saveStoredFullUsers(filtered);
-    return { success: true, message: 'User deleted successfully' };
+    const creds = getAdminCreds();
+    if (!creds) return { success: false, error: ADMIN_EXPIRED };
+    const res = await callRpc('app_delete_user', {
+      p_admin_user: creds.u,
+      p_admin_pass: creds.p,
+      p_id: rowIndex,
+    });
+    if (!res.success) return { success: false, error: res.error };
+    return { success: true, message: 'User deleted successfully!' };
   },
 
   // -------------------------------------------------------------
-  // AUTHENTICATION (Checks Google Sheet Users tab)
+  // AUTHENTICATION (checked in the database; password hashes never leave it)
   // -------------------------------------------------------------
   async login(username, password) {
-    const cleanUser = (username || '').trim().toLowerCase();
+    const cleanUser = (username || '').trim();
     const cleanPass = (password || '').trim();
 
-    // 1. First attempt to check live Google Sheet Users tab
-    try {
-      const usersRes = await this.getUsers();
-      if (usersRes && usersRes.success && Array.isArray(usersRes.data)) {
-        const found = usersRes.data.find(
-          (u) =>
-            u.username.toLowerCase() === cleanUser &&
-            u.password.trim() === cleanPass
-        );
-
-        if (found) {
-          return {
-            success: true,
-            message: 'Login successful',
-            user: {
-              username: found.username,
-              name: found.username,
-              role: found.role,
-              firmAccess: found.firmAccess,
-              pagePermissions: found.pagePermissions,
-              token: 'token_' + Date.now(),
-            },
-          };
-        }
-      }
-    } catch (err) {
-      console.warn('Error during live users check:', err);
+    if (!supabase) {
+      return { success: false, message: 'Server is not configured. Please contact the administrator.' };
     }
 
-    // 2. Emergency fallback login for initial system setup if Users sheet is not yet configured
-    if ((cleanUser === 'admin' && (cleanPass === 'admin' || cleanPass === 'Admin123')) || (cleanUser === 'admin123' && cleanPass === 'admin123')) {
-      return {
-        success: true,
-        message: 'Login successful (Initial Admin Setup)',
-        user: {
-          username: 'admin',
-          name: 'Administrator',
-          role: 'Administrator',
-          firmAccess: 'All',
-          pagePermissions: 'All',
-          token: 'token_' + Date.now(),
-        },
-      };
+    const res = await callRpc('app_login', { p_username: cleanUser, p_password: cleanPass });
+    if (!res.success) {
+      return { success: false, message: 'Could not reach the server. Please check your connection and try again.' };
+    }
+
+    const found = res.data;
+    if (!found) {
+      return { success: false, message: 'Invalid Username or Password.' };
+    }
+
+    if (found.role === 'Admin') {
+      try {
+        sessionStorage.setItem(ADMIN_CREDS_KEY, JSON.stringify({ u: cleanUser, p: cleanPass }));
+      } catch { /* sessionStorage unavailable — admin user management will ask to re-login */ }
+    } else {
+      try { sessionStorage.removeItem(ADMIN_CREDS_KEY); } catch { /* ignore */ }
     }
 
     return {
-      success: false,
-      message: 'Invalid Username or Password. Please check your credentials in the Users sheet.',
+      success: true,
+      message: 'Login successful',
+      user: {
+        username: found.username,
+        name: found.username,
+        role: found.role,
+        firmAccess: found.firm_access,
+        pagePermissions: found.page_permissions,
+        token: 'token_' + Date.now(),
+      },
     };
   },
 
   // -------------------------------------------------------------
-  // MASTER TAB OPERATIONS (Dynamic Dropdown Data from Google Sheet)
+  // MASTER DATA (dropdown options + party directory)
   // -------------------------------------------------------------
   async getMasterData() {
     if (!FORCE_MOCK) {
       try {
-        // Try fetching from sheet tab 'Master' or 'Masters'
-        let res = await getFromAppsScript('Master');
-        if (!res || !res.success || !Array.isArray(res.data) || res.data.length < 2) {
-          res = await getFromAppsScript('Masters');
-        }
-
-        if (res && res.success && Array.isArray(res.data) && res.data.length > 0) {
-          const parsed = parseMasterSheet(res.data);
+        const { data, error } = await supabase
+          .from('master_sheet')
+          .select('data')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (!error && data && data[0] && Array.isArray(data[0].data)) {
+          const parsed = parseMasterSheet(data[0].data);
           if (parsed && Object.keys(parsed).length > 0) {
             return { success: true, data: parsed };
           }
         }
       } catch (err) {
-        console.warn('Could not fetch live Master sheet:', err);
+        console.warn('Could not fetch Master data:', err);
       }
     }
-
-    // Return empty if no Master sheet data
     return { success: true, data: {} };
+  },
+
+  // Raw master matrix (header row + rows) for the Master Data editor
+  async getMasterMatrix() {
+    if (!supabase) return { success: false, error: 'Supabase is not configured' };
+    const { data, error } = await supabase
+      .from('master_sheet')
+      .select('id, data')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (error) return { success: false, error: error.message };
+    if (!data || !data[0]) return { success: false, error: 'Master data not found' };
+    return { success: true, id: data[0].id, data: data[0].data };
+  },
+
+  async saveMasterData(matrix) {
+    if (!supabase) return { success: false, error: 'Supabase is not configured' };
+    const current = await this.getMasterMatrix();
+    const payload = { data: matrix, updated_at: new Date().toISOString() };
+    const { error } = current.success && current.id
+      ? await supabase.from('master_sheet').update(payload).eq('id', current.id)
+      : await supabase.from('master_sheet').insert(payload);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
   // -------------------------------------------------------------

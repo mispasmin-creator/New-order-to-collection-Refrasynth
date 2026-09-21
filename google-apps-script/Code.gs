@@ -28,6 +28,23 @@ function doGet(e) {
     var params = (e && e.parameter) ? e.parameter : {};
     var action = params.action;
 
+    // Read-only helper: returns the header row plus the formulas of the first data rows,
+    // so Planned / Time Delay rules can be reproduced elsewhere.
+    if (action === 'formulas') {
+        try {
+            const fsheet = getSpreadsheet().getSheetByName(params.sheet || params.sheetName || "FMS");
+            if (!fsheet) return jsonError("Sheet not found");
+            const lastCol = fsheet.getLastColumn();
+            return ContentService.createTextOutput(JSON.stringify({
+                success: true,
+                headers: fsheet.getRange(6, 1, 1, lastCol).getValues()[0],
+                formulas: fsheet.getRange(7, 1, 3, lastCol).getFormulas()
+            })).setMimeType(ContentService.MimeType.JSON);
+        } catch (ferr) {
+            return jsonError(ferr.message || "Server error");
+        }
+    }
+
     // If an action like insert, update, delete is sent via GET, route directly to doPost
     // This provides 100% CORS-free write capability for browser frontend apps!
     if (action && action !== 'read') {
