@@ -158,6 +158,7 @@ export default function OrdersPage() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [statusTab, setStatusTab] = useState('Pending'); // 'Pending' | 'Complete'
 
   // Modals state — Edit/Delete are intentionally not offered from the app;
   // changes to existing rows are made directly in the Google Sheet.
@@ -353,8 +354,21 @@ export default function OrdersPage() {
   const getPendingQty = (order) =>
     Math.max(0, (Number(order.quantity) || 0) - getDispatchedQty(order) - getCancelledQty(order));
 
-  // Export respects whatever search/category filter is currently applied
-  const buildExportRows = () => filteredOrders.map((o) => ({
+  const getGroupPendingQty = (group) => group.orders.reduce((sum, o) => sum + getPendingQty(o), 0);
+
+  // Pending = still has qty left to dispatch; Complete = fully dispatched/cancelled
+  const pendingGroups = useMemo(
+    () => groupedOrders.filter((g) => getGroupPendingQty(g) > 0),
+    [groupedOrders, dispatchedByDo, cancelledByDo]
+  );
+  const completeGroups = useMemo(
+    () => groupedOrders.filter((g) => getGroupPendingQty(g) === 0),
+    [groupedOrders, dispatchedByDo, cancelledByDo]
+  );
+  const visibleGroups = statusTab === 'Pending' ? pendingGroups : completeGroups;
+
+  // Export respects whatever search/category/tab filter is currently applied
+  const buildExportRows = () => visibleGroups.flatMap((g) => g.orders).map((o) => ({
     'Timestamp': api.formatDate(o.timestamp),
     'DO-Delivery Order No.': o.doNumber,
     'Party PO No': o.partyPoNo,
@@ -703,6 +717,32 @@ export default function OrdersPage() {
             </select>
           </div>
         </div>
+
+        {/* Pending / Complete tabs */}
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold w-fit">
+          <button
+            type="button"
+            onClick={() => setStatusTab('Pending')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all ${
+              statusTab === 'Pending'
+                ? 'bg-white text-amber-600 shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Pending ({pendingGroups.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusTab('Complete')}
+            className={`px-3.5 py-1.5 rounded-lg transition-all ${
+              statusTab === 'Complete'
+                ? 'bg-white text-emerald-600 shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Complete ({completeGroups.length})
+          </button>
+        </div>
       </div>
 
       {/* Orders Table */}
@@ -735,20 +775,30 @@ export default function OrdersPage() {
                     <p className="text-xs font-medium text-slate-500">Loading orders from Google Sheets...</p>
                   </td>
                 </tr>
-              ) : groupedOrders.length === 0 ? (
+              ) : visibleGroups.length === 0 ? (
                 <tr>
                   <td colSpan="41" className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <h3 className="text-sm font-semibold text-slate-700">No orders recorded in Google Sheets yet</h3>
+                    <h3 className="text-sm font-semibold text-slate-700">
+                      {groupedOrders.length === 0
+                        ? 'No orders recorded yet'
+                        : statusTab === 'Pending'
+                        ? 'No pending orders'
+                        : 'No completed orders yet'}
+                    </h3>
                     <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                       {searchQuery || categoryFilter !== 'All'
                         ? 'Try adjusting your search query or filters.'
-                        : 'Click "+ Add New Order" above to create your first delivery order.'}
+                        : groupedOrders.length === 0
+                        ? 'Click "+ Add New Order" above to create your first delivery order.'
+                        : statusTab === 'Pending'
+                        ? 'Every order has been fully dispatched or cancelled.'
+                        : 'No order has reached zero pending quantity yet.'}
                     </p>
                   </td>
                 </tr>
               ) : (
-                groupedOrders.map((group) => {
+                visibleGroups.map((group) => {
                   const orderRows = group.orders;
                   const order = orderRows[0]; // shared PO/party/commercial fields
                   const isGroup = orderRows.length > 1;
@@ -902,8 +952,7 @@ export default function OrdersPage() {
 
         <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>
-            Showing {groupedOrders.length} order{groupedOrders.length === 1 ? '' : 's'}
-            {filteredOrders.length !== groupedOrders.length ? ` (${filteredOrders.length} product line items)` : ''}
+            Showing {visibleGroups.length} {statusTab.toLowerCase()} order{visibleGroups.length === 1 ? '' : 's'}
           </span>
           <span>Google Sheet: <strong>FMS</strong> Tab (37 Columns starting from Row 7)</span>
         </div>
