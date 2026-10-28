@@ -26,6 +26,8 @@ import {
   HelpCircle,
   ExternalLink,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const DEFAULT_FIRM_OPTIONS = [
   'Refrasynth Corporate',
@@ -366,6 +368,8 @@ export default function OrdersPage() {
     [groupedOrders, dispatchedByDo, cancelledByDo]
   );
   const visibleGroups = statusTab === 'Pending' ? pendingGroups : completeGroups;
+
+  const pg = usePagination(visibleGroups, `${statusTab}|${searchQuery}|${categoryFilter}`);
 
   // Export respects whatever search/category/tab filter is currently applied
   const buildExportRows = () => visibleGroups.flatMap((g) => g.orders).map((o) => ({
@@ -798,7 +802,7 @@ export default function OrdersPage() {
                   </td>
                 </tr>
               ) : (
-                visibleGroups.map((group) => {
+                pg.pageItems.map((group) => {
                   const orderRows = group.orders;
                   const order = orderRows[0]; // shared PO/party/commercial fields
                   const isGroup = orderRows.length > 1;
@@ -949,6 +953,7 @@ export default function OrdersPage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
 
         <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>

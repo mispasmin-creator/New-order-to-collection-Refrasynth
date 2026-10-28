@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
+import StageDateCell from '../components/common/StageDateCell';
 import Modal from '../components/common/Modal';
 import ExportButton from '../components/common/ExportButton';
 import {
@@ -15,6 +16,8 @@ import {
   Percent,
   Eye,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 export default function CheckForDeliveryPage() {
   const [orders, setOrders]                 = useState([]);
@@ -162,6 +165,8 @@ export default function CheckForDeliveryPage() {
     });
     return groups;
   }, [filteredOrders]);
+
+  const pg = usePagination(groupedOrders, `${statusTab}|${searchQuery}`);
 
   // Counts
   const pendingCount = useMemo(
@@ -393,12 +398,14 @@ export default function CheckForDeliveryPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Quantity</th>
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Total PO Value</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
+                {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-20 text-center text-slate-400">
+                  <td colSpan={9 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading orders from Google Sheets...
@@ -407,7 +414,7 @@ export default function CheckForDeliveryPage() {
                 </tr>
               ) : groupedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-16 text-center text-slate-400">
+                  <td colSpan={9 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No orders in this stage
@@ -420,7 +427,7 @@ export default function CheckForDeliveryPage() {
                   </td>
                 </tr>
               ) : (
-                groupedOrders.map((group) => {
+                pg.pageItems.map((group) => {
                   const orderRows = group.orders;
                   const order = orderRows[0];
                   const isGroup = orderRows.length > 1;
@@ -500,6 +507,7 @@ export default function CheckForDeliveryPage() {
                           <span className="text-amber-600 font-medium text-[11px]">Pending</span>
                         )}
                       </td>
+                      <StageDateCell tab={statusTab} planned={orderRows.map((o) => o.planned3)} actual={orderRows.map((o) => o.actual3)} />
                     </tr>
                   );
                 })
@@ -507,6 +515,7 @@ export default function CheckForDeliveryPage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
       </div>
 
       {/* ── Check Delivery Modal ────────────────────────────────────────── */}

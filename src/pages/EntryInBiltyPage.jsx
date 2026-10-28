@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
+import StageDateCell from '../components/common/StageDateCell';
 import Modal from '../components/common/Modal';
 import ExportButton from '../components/common/ExportButton';
 import FileUploader from '../components/common/FileUploader';
@@ -12,6 +13,8 @@ import {
   FileSpreadsheet,
   Eye,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const fmtQty = (n) => {
   const num = Number(n) || 0;
@@ -161,6 +164,8 @@ export default function EntryInBiltyPage() {
       );
     });
   }, [batches, statusTab, searchQuery]);
+
+  const pg = usePagination(filteredBatches, `${statusTab}|${searchQuery}`);
 
   const pendingCount = useMemo(() => batches.filter((b) => !isBatchDone(b)).length, [batches]);
   const completedCount = useMemo(() => batches.filter((b) => isBatchDone(b)).length, [batches]);
@@ -352,12 +357,14 @@ export default function EntryInBiltyPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Bilty No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bilty Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
+                {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="15" className="py-20 text-center text-slate-400">
+                  <td colSpan={16 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-amber-700 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading shipments from Google Sheets...
@@ -366,7 +373,7 @@ export default function EntryInBiltyPage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="15" className="py-16 text-center text-slate-400">
+                  <td colSpan={16 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -379,7 +386,7 @@ export default function EntryInBiltyPage() {
                   </td>
                 </tr>
               ) : (
-                filteredBatches.map((batch) => {
+                pg.pageItems.map((batch) => {
                   const primary = batch.entries[0];
                   const isMulti = batch.entries.length > 1;
                   const doNumbers = batch.entries.map((e) => e.doNumber).filter(Boolean).join(', ');
@@ -483,6 +490,7 @@ export default function EntryInBiltyPage() {
                           <span className="text-amber-600 font-medium text-[11px]">Pending</span>
                         )}
                       </td>
+                      <StageDateCell tab={statusTab} planned={batch.entries.map((e) => e.biltyEntryPlanned)} actual={batch.entries.map((e) => e.biltyEntryActual)} />
                     </tr>
                   );
                 })
@@ -490,6 +498,7 @@ export default function EntryInBiltyPage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
       </div>
 
       {/* ── Entry In Bilty Modal ─────────────────────────────────────────── */}

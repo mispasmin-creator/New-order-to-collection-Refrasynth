@@ -12,6 +12,8 @@ import {
   Building2,
   ListChecks,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 // Master sheet layout: column 1-3 are the party directory (row-aligned:
 // Party Name / GST Number / Delivery Address); every other column is an
@@ -108,6 +110,8 @@ export default function MasterDataPage() {
       .map((p, idx) => ({ ...p, idx }))
       .filter((p) => !q || `${p.name} ${p.gst} ${p.address}`.toLowerCase().includes(q));
   }, [parties, search]);
+
+  const pg = usePagination(filteredParties, `${search}`);
 
   const updateParty = (idx, field, value) => {
     setParties((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
@@ -301,7 +305,7 @@ export default function MasterDataPage() {
                       <td colSpan="4" className="py-14 text-center text-slate-400">No parties found.</td>
                     </tr>
                   ) : (
-                    filteredParties.map((p) => (
+                    pg.pageItems.map((p) => (
                       <tr key={p.idx} className="hover:bg-slate-50/80">
                         <td className="px-3 py-2">
                           <input className={inputCls} value={p.name} onChange={(e) => updateParty(p.idx, 'name', e.target.value)} placeholder="Party name" />
@@ -328,6 +332,7 @@ export default function MasterDataPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination {...pg} />
           </>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col md:flex-row">

@@ -21,6 +21,7 @@ import {
   Ban,
   RotateCcw,
   Database,
+  Timer,
 } from 'lucide-react';
 import DashboardPage from '../pages/DashboardPage';
 import OrdersPage from '../pages/OrdersPage';
@@ -41,6 +42,7 @@ import OrderCancelPage from '../pages/OrderCancelPage';
 import MaterialReturnPage from '../pages/MaterialReturnPage';
 import ManageUsersPage from '../pages/ManageUsersPage';
 import MasterDataPage from '../pages/MasterDataPage';
+import MisReportingPage from '../pages/MisReportingPage';
 import { navPages } from './navPages';
 
 /**
@@ -70,6 +72,7 @@ export const iconMap = {
   Ban,
   RotateCcw,
   Database,
+  Timer,
 };
 
 // Maps each navPages id to the component that renders it. The id/label/path/
@@ -94,6 +97,7 @@ const componentMap = {
   'full-kitting': FullKittingPage,
   'order-cancel': OrderCancelPage,
   'material-return': MaterialReturnPage,
+  'mis-reporting': MisReportingPage,
   'master-data': MasterDataPage,
   'manage-users': ManageUsersPage,
 };

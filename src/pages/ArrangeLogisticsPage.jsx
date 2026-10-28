@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
+import StageDateCell from '../components/common/StageDateCell';
 import Modal from '../components/common/Modal';
 import ExportButton from '../components/common/ExportButton';
 import FileUploader from '../components/common/FileUploader';
@@ -14,6 +15,8 @@ import {
   Check,
   Eye,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const fmtQty = (n) => {
   const num = Number(n) || 0;
@@ -286,6 +289,8 @@ export default function ArrangeLogisticsPage() {
     );
   }, [allHistoryBatches, searchQuery]);
 
+  const pg = usePagination(statusTab === 'History' ? historyBatches : filteredBatches, `${statusTab}|${searchQuery}`);
+
   // Counts
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pendingCount = useMemo(() => batches.filter((b) => !isBatchArranged(b)).length, [batches, arrangedByDNumber]);
@@ -543,12 +548,14 @@ export default function ArrangeLogisticsPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Type Of Transporting</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Date Of Dispatch</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">LGST Status</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
+                {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading dispatched shipments from Google Sheets...
@@ -558,7 +565,7 @@ export default function ArrangeLogisticsPage() {
               ) : statusTab === 'History' ? (
                 historyBatches.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="py-16 text-center text-slate-400">
+                    <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                       <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       <h3 className="text-sm font-semibold text-slate-700">
                         No shipments arranged yet
@@ -569,7 +576,7 @@ export default function ArrangeLogisticsPage() {
                     </td>
                   </tr>
                 ) : (
-                  historyBatches.map((batch) => {
+                  pg.pageItems.map((batch) => {
                     const entries = batch.entries;
                     const isMulti = entries.length > 1;
                     const primary = entries[0];
@@ -621,13 +628,14 @@ export default function ArrangeLogisticsPage() {
                             ))}
                           </div>
                         </td>
+                        <StageDateCell tab={statusTab} planned={entries.map((e) => dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()]?.plannedLogistics)} actual={entries.map((e) => e.timestamp)} />
                       </tr>
                     );
                   })
                 )
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -638,7 +646,7 @@ export default function ArrangeLogisticsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredBatches.map((batch) => {
+                pg.pageItems.map((batch) => {
                   const primary = batch.entries[0];
                   const isMulti = batch.entries.length > 1;
                   const doNumbers = batch.entries.map((e) => e.doNumber).filter(Boolean).join(', ');
@@ -720,6 +728,7 @@ export default function ArrangeLogisticsPage() {
                           <span className="text-amber-600 font-medium text-[11px]">Pending</span>
                         )}
                       </td>
+                      <StageDateCell tab={statusTab} planned={batch.entries.map((e) => e.plannedLogistics)} actual={null} />
                     </tr>
                   );
                 })
@@ -727,6 +736,7 @@ export default function ArrangeLogisticsPage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
       </div>
 
       {/* ── Arrange Logistics Custom Modal ─────────────────────────────── */}

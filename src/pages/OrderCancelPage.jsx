@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
+import StageDateCell from '../components/common/StageDateCell';
 import Modal from '../components/common/Modal';
 import ExportButton from '../components/common/ExportButton';
 import {
@@ -11,6 +12,8 @@ import {
   AlertCircle,
   PlusCircle,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const fmtQty = (n) => {
   const num = Number(n) || 0;
@@ -113,6 +116,8 @@ export default function OrderCancelPage() {
       );
     });
   }, [cancelEntries, statusTab, searchQuery]);
+
+  const pg = usePagination(filteredEntries, `${statusTab}|${searchQuery}`);
 
   // Order lines eligible for a new cancellation request — skip lines that
   // already have a Pending (unresolved) cancel request against them.
@@ -378,12 +383,14 @@ export default function OrderCancelPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Reason</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Status</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
+                {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading cancellation requests from Google Sheets...
@@ -392,7 +399,7 @@ export default function OrderCancelPage() {
                 </tr>
               ) : filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                     <Ban className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No cancellation requests
@@ -405,7 +412,7 @@ export default function OrderCancelPage() {
                   </td>
                 </tr>
               ) : (
-                filteredEntries.map((entry) => (
+                pg.pageItems.map((entry) => (
                   <tr key={entry.rowIndex} className="hover:bg-slate-50/80 transition-colors">
                     <td className="sticky left-0 bg-white z-10 px-3 py-2 text-center whitespace-nowrap border-r border-slate-200 shadow-xs">
                       {isResolved(entry) ? (
@@ -444,12 +451,14 @@ export default function OrderCancelPage() {
                     <td className="px-3.5 py-3 whitespace-nowrap">
                       {statusBadge(entry.status)}
                     </td>
+                    <StageDateCell tab={statusTab} planned={entry.planned} actual={entry.actual} />
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
       </div>
 
       {/* ── Request Cancellation Modal ─────────────────────────────────── */}

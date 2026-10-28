@@ -19,6 +19,8 @@ import {
   AlertCircle,
   Lock,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 // Pulled directly from the sidebar/route config so this list always matches
 // every real step of the O2C workflow — new pages need no edit here.
@@ -109,6 +111,8 @@ export default function ManageUsersPage() {
       return matchesRole && matchesSearch;
     });
   }, [users, searchQuery, roleFilter]);
+
+  const pg = usePagination(filteredUsers, `${searchQuery}|${roleFilter}`);
 
   const buildExportRows = () => filteredUsers.map((u) => ({
     'User Name': u.username,
@@ -402,7 +406,7 @@ export default function ManageUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredUsers.map((user, idx) => {
+                {pg.pageItems.map((user, idx) => {
                   const isVisible = showPasswords[user.rowIndex ?? idx];
                   const permsArray = (user.pagePermissions || 'All')
                     .split(',')
@@ -501,6 +505,7 @@ export default function ManageUsersPage() {
           </div>
         )}
 
+        <Pagination {...pg} />
         {/* Footer info */}
         <div className="bg-slate-50/80 px-5 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
           <span>Total: <strong>{filteredUsers.length}</strong> active user accounts</span>

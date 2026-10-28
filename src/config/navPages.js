@@ -25,6 +25,7 @@ export const navPages = [
   { id: 'full-kitting', label: 'Full Kitting', path: '/full-kitting', icon: 'PackageCheck', inSidebar: true },
   { id: 'order-cancel', label: 'Order Cancel', path: '/order-cancel', icon: 'Ban', inSidebar: true },
   { id: 'material-return', label: 'Material Return', path: '/material-return', icon: 'RotateCcw', inSidebar: true },
+  { id: 'mis-reporting', label: 'MIS & Reporting', path: '/mis-reporting', icon: 'BarChart3', inSidebar: true },
   { id: 'master-data', label: 'Master Data', path: '/master-data', icon: 'Database', inSidebar: true },
   { id: 'manage-users', label: 'Manage Users', path: '/manage-users', icon: 'Users', inSidebar: true },
 ];

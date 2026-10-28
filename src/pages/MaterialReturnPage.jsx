@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
+import StageDateCell from '../components/common/StageDateCell';
 import Modal from '../components/common/Modal';
 import FileUploader from '../components/common/FileUploader';
 import ExportButton from '../components/common/ExportButton';
@@ -17,6 +18,8 @@ import {
   Check,
   ChevronRight,
 } from 'lucide-react';
+import usePagination from '../hooks/usePagination';
+import Pagination from '../components/common/Pagination';
 
 const fmtQty = (n) => {
   const num = Number(n) || 0;
@@ -148,6 +151,8 @@ export default function MaterialReturnPage() {
       );
     });
   }, [returnEntries, statusTab, searchQuery]);
+
+  const pg = usePagination(filteredEntries, `${statusTab}|${searchQuery}`);
 
   // Order lines eligible for a new return request — skip lines that already
   // have an in-progress (not yet fully completed) return request against them.
@@ -553,12 +558,14 @@ export default function MaterialReturnPage() {
                 <th className="px-3.5 py-3 whitespace-nowrap text-right">Qty</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Reason</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Progress</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
+                {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading material return requests from Google Sheets...
@@ -567,7 +574,7 @@ export default function MaterialReturnPage() {
                 </tr>
               ) : filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-slate-400">
+                  <td colSpan={10 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
                     <RotateCcw className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No material return requests
@@ -580,7 +587,7 @@ export default function MaterialReturnPage() {
                   </td>
                 </tr>
               ) : (
-                filteredEntries.map((entry) => {
+                pg.pageItems.map((entry) => {
                   const stage = getStage(entry);
                   return (
                     <tr key={entry.rowIndex} className="hover:bg-slate-50/80 transition-colors">
@@ -617,6 +624,7 @@ export default function MaterialReturnPage() {
                       <td className="px-3.5 py-3 whitespace-nowrap">
                         {stageStepper(entry)}
                       </td>
+                      <StageDateCell tab={statusTab} planned={statusTab === 'History' ? entry.planned4 : [1, 2, 3, 4].map((i) => (!entry[`actual${i}`] ? entry[`planned${i}`] : ''))} actual={entry.actual4} />
                     </tr>
                   );
                 })
@@ -624,6 +632,7 @@ export default function MaterialReturnPage() {
             </tbody>
           </table>
         </div>
+        <Pagination {...pg} />
       </div>
 
       {/* ── Request Material Return Modal ─────────────────────────────── */}

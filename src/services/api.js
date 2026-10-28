@@ -473,6 +473,10 @@ export const api = {
           'total po value'                                : 'totalPoValue',
           'sales person name'                             : 'salesPersonName',
           'tc required'                                   : 'tcRequired',
+          'planned 1'                                     : 'planned1',
+          'planned 2'                                     : 'planned2',
+          'planned 3'                                     : 'planned3',
+          'planned 4'                                     : 'planned4',
           'actual 1'                                      : 'actual1',
           'expected delivery date'                        : 'expectedDeliveryDate',
           'status 1'                                      : 'status1',
@@ -588,6 +592,10 @@ export const api = {
             tcRequired           : col(row, 'tcRequired', 'No'),
 
             // Stage 1 Workflow fields (Check PO)
+            planned1             : formatAppDate(col(row, 'planned1', col(row, 'planned 1', ''))),
+            planned2             : formatAppDate(col(row, 'planned2', col(row, 'planned 2', ''))),
+            planned3             : formatAppDate(col(row, 'planned3', col(row, 'planned 3', ''))),
+            planned4             : formatAppDate(col(row, 'planned4', col(row, 'planned 4', ''))),
             actual1              : formatAppDate(col(row, 'actual1', col(row, 'actual 1', ''))),
             expectedDeliveryDate : formatAppDate(col(row, 'expectedDeliveryDate', col(row, 'expected delivery date', ''))),
             status1              : col(row, 'status1', col(row, 'status 1', '')),
@@ -1086,6 +1094,7 @@ export const api = {
               qtyToBeDispatched: (row[colMap['qty to be dispatched']] ?? '').toString().trim(),
               typeOfTransporting: (row[colMap['type of transporting']] ?? '').toString().trim(),
               dateOfDispatch: formatAppDate(row[colMap['date of dispatch']] || ''),
+              plannedLogistics: formatAppDate(row[colMap['planned 2']] || ''),
             });
           }
 
