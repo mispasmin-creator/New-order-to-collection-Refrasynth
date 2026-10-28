@@ -7,7 +7,7 @@ import StatCard from '../components/common/StatCard';
 import ExportButton from '../components/common/ExportButton';
 import { formatAppDate } from '../utils/dateFormatter';
 import { STAGES, DAY, isDone, loadStageData, buildStageRows } from '../utils/tatData';
-import { BarChart3, RefreshCw, AlertCircle, Info, Clock, CheckCircle2, Hourglass, Gauge, ChevronDown, ChevronRight } from 'lucide-react';
+import { BarChart3, RefreshCw, AlertCircle, Clock, CheckCircle2, Hourglass, Gauge, ChevronDown, ChevronRight } from 'lucide-react';
 
 const PERIODS = [
   { key: 'today', label: 'Today' },
@@ -87,7 +87,7 @@ export default function MisPage() {
     setLoading(true);
     setError('');
     try {
-      const [stageData, usersRes] = await Promise.all([loadStageData(), api.getUsers()]);
+      const [stageData, usersRes] = await Promise.all([loadStageData(), api.getOwners()]);
       setData(stageData);
       if (usersRes.success) {
         setUsers(usersRes.data);
@@ -177,7 +177,7 @@ export default function MisPage() {
           <div className="p-3 rounded-xl bg-indigo-50 text-indigo-600"><BarChart3 className="w-6 h-6" /></div>
           <div>
             <h1 className="text-xl font-bold text-slate-800">MIS</h1>
-            <p className="text-sm text-slate-500">Who is working on what, and how much is pending. Reference view built on live data.</p>
+            <p className="text-sm text-slate-500">Who is working on what, and how much is pending.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -194,15 +194,6 @@ export default function MisPage() {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
-      </div>
-
-      <div className="flex items-start gap-2 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-3 text-sm">
-        <Info className="w-4 h-4 shrink-0 mt-0.5" />
-        <p>
-          <b>Reference view.</b> The system does not yet record who completed each step. A person's work is taken from the
-          <b> Page Permissions</b> given in Manage Users: everyone who can open a page is counted as its owner (a shared stage counts for each owner).
-          Once an activity log is added, this page will also show who actually did each step.
-        </p>
       </div>
 
       {error && (
@@ -385,7 +376,7 @@ export default function MisPage() {
               );
             })}
             {ownerGroups.length === 0 && (
-              <tr><td colSpan={7} className="text-center text-slate-400 py-6">{usersError ? `Users could not be loaded (${usersError}). Log in as Admin again to see owners.` : loading ? 'Loading...' : 'No owners found'}</td></tr>
+              <tr><td colSpan={7} className="text-center text-slate-400 py-6">{usersError ? `Users could not be loaded (${usersError}). Press Refresh to try again.` : loading ? 'Loading...' : 'No owners found'}</td></tr>
             )}
           </tbody>
         </table>

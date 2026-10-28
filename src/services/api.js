@@ -260,6 +260,20 @@ export const api = {
   // -------------------------------------------------------------
   // USERS (admin-only, via secured database functions)
   // -------------------------------------------------------------
+  // Username, role and page permissions only; no Admin session needed (used by the MIS page).
+  async getOwners() {
+    const res = await callRpc('app_list_owners', {});
+    if (!res.success) return { success: false, error: res.error, data: [] };
+    return {
+      success: true,
+      data: (res.data || []).map((u) => ({
+        username: u.username,
+        role: u.role,
+        pagePermissions: u.page_permissions,
+      })),
+    };
+  },
+
   async getUsers() {
     const creds = getAdminCreds();
     if (!creds) return { success: false, error: ADMIN_EXPIRED, data: [] };
