@@ -104,12 +104,23 @@ export default function MakeInvoicePage() {
     return map;
   }, [dispatchEntries]);
 
+  const dispatchByDoNumber = useMemo(() => {
+    const map = {};
+    dispatchEntries.forEach((e) => {
+      const key = (e.doNumber || '').trim().toLowerCase();
+      if (key && !map[key]) map[key] = e;
+    });
+    return map;
+  }, [dispatchEntries]);
+
   // Only Billing rows that already had weighment done are eligible here
   const enrichedBillingEntries = useMemo(() => {
     return billingEntries
       .filter((e) => e.lgstNo && e.weighmentActual)
       .map((e) => {
-        const dispatch = dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()];
+        const dispatch =
+          dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()] ||
+          dispatchByDoNumber[(e.doNumber || '').trim().toLowerCase()];
         const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
         return {
           ...e,
@@ -123,7 +134,7 @@ export default function MakeInvoicePage() {
           partyNames: order?.partyNames || e.partyName || '',
         };
       });
-  }, [billingEntries, dispatchByDNumber, orderByDoNumber]);
+  }, [billingEntries, dispatchByDNumber, dispatchByDoNumber, orderByDoNumber]);
 
   // Group into the same shipment batches used across Dispatch/Arrange Logistics/Load Material/Weighment
   const batches = useMemo(() => {
@@ -181,7 +192,9 @@ export default function MakeInvoicePage() {
       'Transporter Name': e.transporterName,
       'Truck No.': e.truckNo,
       'Actual Truck Qty': e.actualTruckQty,
+      'Dispatch Date': e.dateOfDispatch || '',
       'Bill No.': e.billNo,
+      'Bill Date': e.invoiceActual || '',
       'Bill Copy': e.billCopy,
       'Status': e.invoiceActual ? 'Invoiced' : 'Pending',
     }))
@@ -361,6 +374,12 @@ export default function MakeInvoicePage() {
                 <th className="px-3.5 py-3 whitespace-nowrap">Bill No.</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Bill Copy</th>
                 <th className="px-3.5 py-3 whitespace-nowrap">Invoice Status</th>
+                {statusTab === 'History' && (
+                  <>
+                    <th className="px-3.5 py-3 whitespace-nowrap">Dispatch Date</th>
+                    <th className="px-3.5 py-3 whitespace-nowrap">Bill Date</th>
+                  </>
+                )}
                 <th className="px-3.5 py-3 whitespace-nowrap">Planned Date</th>
                 {statusTab === 'History' && <th className="px-3.5 py-3 whitespace-nowrap">Actual Date</th>}
               </tr>
@@ -368,7 +387,7 @@ export default function MakeInvoicePage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={21 + (statusTab === 'History' ? 1 : 0)} className="py-20 text-center text-slate-400">
+                  <td colSpan={statusTab === 'History' ? 25 : 22} className="py-20 text-center text-slate-400">
                     <div className="w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <p className="text-xs font-medium text-slate-500">
                       Loading weighed shipments from Google Sheets...
@@ -377,7 +396,7 @@ export default function MakeInvoicePage() {
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={21 + (statusTab === 'History' ? 1 : 0)} className="py-16 text-center text-slate-400">
+                  <td colSpan={statusTab === 'History' ? 25 : 22} className="py-16 text-center text-slate-400">
                     <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                     <h3 className="text-sm font-semibold text-slate-700">
                       No shipments in this stage
@@ -398,6 +417,8 @@ export default function MakeInvoicePage() {
                   const totalQty = batch.entries.reduce((sum, e) => sum + (parseFloat(e.qtyToBeDispatched) || 0), 0);
                   const lgstNos = [...new Set(batch.entries.map((e) => e.lgstNo).filter(Boolean))];
                   const billNos = [...new Set(batch.entries.map((e) => e.billNo).filter(Boolean))];
+                  const dispatchDates = [...new Set(batch.entries.map((e) => e.dateOfDispatch).filter(Boolean))];
+                  const billDates = [...new Set(batch.entries.map((e) => e.invoiceActual).filter(Boolean))];
                   const billCopyUrl = batch.entries.map((e) => e.billCopy).find(Boolean);
                   const invoiced = isBatchInvoiced(batch);
 
@@ -518,6 +539,16 @@ export default function MakeInvoicePage() {
                           <span className="text-amber-600 font-medium text-[11px]">Pending</span>
                         )}
                       </td>
+                      {statusTab === 'History' && (
+                        <>
+                          <td className="px-3.5 py-3 whitespace-nowrap text-slate-700 font-mono text-[11px]">
+                            {dispatchDates.join(', ') || primary.dateOfDispatch || '—'}
+                          </td>
+                          <td className="px-3.5 py-3 whitespace-nowrap text-slate-700 font-mono text-[11px]">
+                            {billDates.join(', ') || primary.invoiceActual || '—'}
+                          </td>
+                        </>
+                      )}
                       <StageDateCell tab={statusTab} planned={batch.entries.map((e) => e.invoicePlanned)} actual={batch.entries.map((e) => e.invoiceActual)} />
                     </tr>
                   );
