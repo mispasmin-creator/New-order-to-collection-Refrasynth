@@ -104,10 +104,11 @@ export default function EntryInBiltyPage() {
     return map;
   }, [dispatchEntries]);
 
-  // Only Billing rows that already completed Sales Form 3 are eligible here
+  // Only Billing rows that already completed Test Certificate are eligible here.
+  // Entry In Bilty is the next workflow stage after Test Certificate.
   const enrichedBillingEntries = useMemo(() => {
     return billingEntries
-      .filter((e) => e.lgstNo && e.salesFormActual)
+      .filter((e) => e.lgstNo && e.tcActual)
       .map((e) => {
         const dispatch = dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()];
         const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
@@ -266,7 +267,7 @@ export default function EntryInBiltyPage() {
             <div>
               <h1 className="text-lg font-bold text-slate-800">Entry In Bilty</h1>
               <p className="text-xs text-slate-500">
-                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Sales Form 3 done
+                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Test Certificate done
               </p>
             </div>
           </div>
@@ -380,7 +381,7 @@ export default function EntryInBiltyPage() {
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
                       {statusTab === 'Pending'
-                        ? 'Shipments with Sales Form 3 done will appear here.'
+                        ? 'Shipments with Test Certificate done will appear here.'
                         : 'No shipments match your filter.'}
                     </p>
                   </td>

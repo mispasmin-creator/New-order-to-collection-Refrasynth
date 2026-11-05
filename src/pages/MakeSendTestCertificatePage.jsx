@@ -103,10 +103,11 @@ export default function MakeSendTestCertificatePage() {
     return map;
   }, [dispatchEntries]);
 
-  // Only Billing rows that already completed Entry In Bilty are eligible here
+  // Only Billing rows that already completed Sales Form 3 are eligible here.
+  // Test Certificate now comes before Entry In Bilty in the workflow.
   const enrichedBillingEntries = useMemo(() => {
     return billingEntries
-      .filter((e) => e.lgstNo && e.biltyEntryActual)
+      .filter((e) => e.lgstNo && e.salesFormActual)
       .map((e) => {
         const dispatch = dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()];
         const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
@@ -257,7 +258,7 @@ export default function MakeSendTestCertificatePage() {
             <div>
               <h1 className="text-lg font-bold text-slate-800">Make & Send Test Certificate</h1>
               <p className="text-xs text-slate-500">
-                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Bilty entry done
+                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Sales Form 3 done
               </p>
             </div>
           </div>
@@ -365,7 +366,7 @@ export default function MakeSendTestCertificatePage() {
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
                       {statusTab === 'Pending'
-                        ? 'Shipments with Bilty entry done will appear here.'
+                        ? 'Shipments with Sales Form 3 done will appear here.'
                         : 'No shipments match your filter.'}
                     </p>
                   </td>

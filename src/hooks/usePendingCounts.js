@@ -164,9 +164,9 @@ export default function usePendingCounts() {
         weighmentEntry: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.loadActual)),
         makeInvoice: groupByLgstNo(enrichBilling((e) => e.lgstNo && e.weighmentActual)),
         salesForm3: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.invoiceActual)),
-        entryInBilty: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
-        sendTestCertificate: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
-        partyGetReport: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.tcActual)),
+        sendTestCertificate: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.salesFormActual)),
+        entryInBilty: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.tcActual)),
+        partyGetReport: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.biltyEntryActual)),
         fullKitting: groupByBillOrLgst(enrichBilling((e) => e.lgstNo && e.reportActual)),
       };
       const countPending = (batches, doneField) =>

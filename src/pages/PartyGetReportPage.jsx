@@ -105,10 +105,10 @@ export default function PartyGetReportPage() {
     return map;
   }, [dispatchEntries]);
 
-  // Only Billing rows that already had the Test Certificate sent are eligible here
+  // Only Billing rows that already completed Entry In Bilty are eligible here
   const enrichedBillingEntries = useMemo(() => {
     return billingEntries
-      .filter((e) => e.lgstNo && e.tcActual)
+      .filter((e) => e.lgstNo && e.biltyEntryActual)
       .map((e) => {
         const dispatch = dispatchByDNumber[(e.dispatchNo || '').trim().toLowerCase()];
         const order = orderByDoNumber[(e.doNumber || '').trim().toLowerCase()];
@@ -265,7 +265,7 @@ export default function PartyGetReportPage() {
             <div>
               <h1 className="text-lg font-bold text-slate-800">Party Get Report</h1>
               <p className="text-xs text-slate-500">
-                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Test Certificate sent
+                {pendingCount} pending shipment{pendingCount === 1 ? '' : 's'} • Shipments with Bilty entry done
               </p>
             </div>
           </div>
@@ -375,7 +375,7 @@ export default function PartyGetReportPage() {
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
                       {statusTab === 'Pending'
-                        ? 'Shipments with Test Certificate sent will appear here.'
+                        ? 'Shipments with Bilty entry done will appear here.'
                         : 'No shipments match your filter.'}
                     </p>
                   </td>
